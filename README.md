@@ -9,6 +9,17 @@ Upload your study materials, and let AI turn them into easy-to-understand notes 
 3. **Chat** — ask questions about your material and get instant answers
 4. **Voice** — tap the Halo button and speak naturally to get spoken explanations
 
+## Screenshots
+
+### Dashboard
+![Dashboard](screenshots/dashboard.png)
+
+### AI Chat
+![AI Chat](screenshots/chat.png)
+
+### Voice Mode
+![Voice Mode](screenshots/voice-mode.png)
+
 ## Languages & Technologies
 
 - **TypeScript** — frontend (Next.js + React)
