@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8007:8007"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:8007
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://backend:8007
+    depends_on:
+      - backend
+    restart: unless-stopped
