@@ -61,15 +61,25 @@ export async function sendMessage(sessionId: number, message: string): Promise<s
   return data.response;
 }
 
-export async function sendVoiceMessage(sessionId: number, message: string): Promise<string> {
+export interface WordTiming {
+  word: string;
+  start: number;
+  end: number;
+}
+
+export interface VoiceResponse {
+  response: string;
+  word_timings: WordTiming[];
+}
+
+export async function sendVoiceMessage(sessionId: number, message: string): Promise<VoiceResponse> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/voice-chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
   });
   if (!res.ok) throw new Error("Failed to send voice message");
-  const data = await res.json();
-  return data.response;
+  return res.json();
 }
 
 export async function generateTTS(sessionId: number, question: string): Promise<Blob> {

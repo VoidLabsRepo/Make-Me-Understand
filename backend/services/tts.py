@@ -1,9 +1,17 @@
 import io
+import os
 import numpy as np
 import soundfile as sf
 from kokoro import KPipeline
 
 _pipeline = None
+
+CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+
+def get_cache_path(session_id: int) -> str:
+    return os.path.join(CACHE_DIR, f"session_{session_id}.wav")
 
 
 def _get_pipeline():
@@ -33,6 +41,47 @@ async def generate_tts(text: str) -> bytes:
     sf.write(buf, combined, 24000, format="WAV")
     buf.seek(0)
     return buf.read()
+
+
+async def generate_voice_timings(text: str) -> tuple[bytes, list[dict]]:
+    """Generate TTS WAV bytes and exact word timings using Kokoro sample counts."""
+    pipeline = _get_pipeline()
+    generator = pipeline(text, voice="af_heart")
+
+    all_audio = []
+    word_timings = []
+    current_time = 0.0
+
+    for gs, _, audio in generator:
+        import torch
+        if isinstance(audio, torch.Tensor):
+            audio = audio.cpu().numpy()
+        all_audio.append(audio)
+
+        # Calculate exact duration in seconds for this chunk
+        chunk_duration = len(audio) / 24000.0
+
+        # Extract words from the grapheme string
+        words = [w for w in gs.split() if w.strip()]
+        if words:
+            word_duration = chunk_duration / len(words)
+            for i, w in enumerate(words):
+                word_timings.append({
+                    "word": w,
+                    "start": current_time + (i * word_duration),
+                    "end": current_time + ((i + 1) * word_duration)
+                })
+
+        current_time += chunk_duration
+
+    combined = np.concatenate(all_audio)
+
+    buf = io.BytesIO()
+    sf.write(buf, combined, 24000, format="WAV")
+    buf.seek(0)
+    wav_bytes = buf.read()
+
+    return wav_bytes, word_timings
 
 
 def make_wav_header(sample_rate: int = 24000, num_channels: int = 1, bits_per_sample: int = 16) -> bytes:

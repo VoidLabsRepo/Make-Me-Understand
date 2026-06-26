@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Persona } from "@/components/ai-elements/persona";
 import type { PersonaState } from "@/components/ai-elements/persona";
 import { sendVoiceMessage } from "@/lib/api";
+import type { WordTiming } from "@/lib/api";
 
 interface VoiceModeProps {
   sessionId: number;
@@ -15,6 +16,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
   const [personaState, setPersonaState] = useState<PersonaState>("idle");
   const [transcript, setTranscript] = useState("");
   const [aiSubtitle, setAiSubtitle] = useState("");
+  const [wordTimings, setWordTimings] = useState<WordTiming[]>([]);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
 
@@ -77,6 +79,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
     abortRef.current?.abort();
     abortRef.current = null;
     setAiSubtitle("");
+    setWordTimings([]);
   }, [killAudio]);
 
   const speakResponse = useCallback(async (question: string) => {
@@ -88,12 +91,14 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
       setPersonaState("thinking");
       killAudio();
       setAiSubtitle("");
+      setWordTimings([]);
 
       // 1. Fetch LLM response first to get subtitle text & save chat messages
-      const responseText = await sendVoiceMessage(sessionId, question);
+      const { response: responseText, word_timings } = await sendVoiceMessage(sessionId, question);
       if (controller.signal.aborted) return;
 
       setAiSubtitle(responseText);
+      setWordTimings(word_timings);
 
       // 2. Play TTS passing the pre-generated text (zero additional LLM latency)
       const url = `/api/sessions/${sessionId}/tts?text=${encodeURIComponent(responseText)}`;
@@ -142,6 +147,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
       setTranscript("");
     }
     setAiSubtitle("");
+    setWordTimings([]);
 
     // Unlock audio on the user gesture so playback later succeeds
     unlockAudio();
@@ -235,40 +241,23 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
             </div>
           )}
 
-          {personaState === "speaking" && aiSubtitle && (
+          {personaState === "speaking" && wordTimings.length > 0 && (
             <div className="bg-transparent border-none shadow-none text-center px-6 max-h-[140px] overflow-y-auto leading-relaxed max-w-lg antialiased tracking-wide text-lg md:text-xl font-medium transition-all duration-300">
-              {(() => {
-                const words = aiSubtitle.split(/(\s+)/);
-                let wordCount = 0;
-                const wordsOnlyCount = aiSubtitle.split(/\s+/).filter(Boolean).length;
-                const ratio = audioDuration ? audioCurrentTime / audioDuration : 0;
-                const highlightedIndex = Math.floor(ratio * wordsOnlyCount);
-
-                return words.map((part, idx) => {
-                  const isWord = /\S/.test(part);
-                  let highlight = false;
-                  if (isWord) {
-                    highlight = wordCount <= highlightedIndex;
-                    wordCount++;
-                  }
-                  return (
-                    <span
-                      key={idx}
-                      className={
-                        isWord
-                          ? `inline-block transition-all duration-500 ease-out ${
-                              highlight
-                                ? "text-slate-800 opacity-100 translate-y-0 scale-100"
-                                : "opacity-0 translate-y-2 scale-95 pointer-events-none"
-                            }`
-                          : undefined
-                      }
-                    >
-                      {part}
-                    </span>
-                  );
-                });
-              })()}
+              {wordTimings.map((item, idx) => {
+                const isSpoken = audioCurrentTime >= item.start;
+                return (
+                  <span
+                    key={idx}
+                    className={`inline-block transition-all duration-500 ease-out mr-1.5 ${
+                      isSpoken
+                        ? "text-slate-800 opacity-100 translate-y-0 scale-100 font-medium"
+                        : "opacity-0 translate-y-2 scale-95 pointer-events-none"
+                    }`}
+                  >
+                    {item.word}
+                  </span>
+                );
+              })}
             </div>
           )}
 

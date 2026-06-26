@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import aiosqlite
+import os
 from database import get_db
 from services.llm import chat_with_context, voice_explain, voice_chat_with_context, clean_voice_text
-from services.tts import generate_tts, stream_tts, make_wav_header
+from services.tts import generate_tts, stream_tts, make_wav_header, get_cache_path, generate_voice_timings
 
 router = APIRouter(prefix="/api/sessions", tags=["chat"])
 
@@ -84,6 +85,14 @@ async def voice_chat(
     raw_response = await voice_chat_with_context(notes, history, req.message)
     response = clean_voice_text(raw_response)
 
+    # Generate audio and word timings
+    wav_bytes, timings = await generate_voice_timings(response)
+
+    # Cache the audio bytes on disk
+    cache_path = get_cache_path(session_id)
+    with open(cache_path, "wb") as f:
+        f.write(wav_bytes)
+
     # Save AI response
     await db.execute(
         "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
@@ -91,7 +100,7 @@ async def voice_chat(
     )
     await db.commit()
 
-    return {"response": response}
+    return {"response": response, "word_timings": timings}
 
 
 class TTSRequest(BaseModel):
@@ -134,6 +143,19 @@ async def tts_get(
     text: str | None = None,
     db: aiosqlite.Connection = Depends(get_db),
 ):
+    # 1. If cached WAV file exists, stream it immediately
+    cache_path = get_cache_path(session_id)
+    if os.path.exists(cache_path):
+        def iter_file():
+            with open(cache_path, "rb") as f:
+                yield f.read()
+        return StreamingResponse(
+            iter_file(),
+            media_type="audio/wav",
+            headers={"Content-Disposition": "attachment; filename=tts.wav"},
+        )
+
+    # 2. Fallback to dynamic generation
     cursor = await db.execute("SELECT notes FROM sessions WHERE id = ?", (session_id,))
     row = await cursor.fetchone()
     if not row:
