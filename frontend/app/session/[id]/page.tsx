@@ -189,7 +189,7 @@ export default function SessionPage() {
 
   const closeNotes = useCallback(() => setNotesOpen(false), []);
 
-  const handleNotesUpdated = useCallback((notes: string) => {
+  const handleNotesUpdated = useCallback((notes: string | null) => {
     setSession((prev) => prev ? { ...prev, notes } : prev);
   }, []);
 

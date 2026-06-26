@@ -71,7 +71,7 @@ export async function generateTTS(sessionId: number, question: string): Promise<
   return res.blob();
 }
 
-export async function appendImages(sessionId: number, files: File[]): Promise<string> {
+export async function appendImages(sessionId: number, files: File[]): Promise<string | null> {
   const form = new FormData();
   for (const file of files) {
     form.append("files", file);

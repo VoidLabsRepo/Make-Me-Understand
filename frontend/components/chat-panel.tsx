@@ -12,7 +12,7 @@ interface ChatPanelProps {
   sessionId: number;
   initialMessages: { role: string; content: string }[];
   onVoiceMode?: () => void;
-  onNotesUpdated?: (notes: string) => void;
+  onNotesUpdated?: (notes: string | null) => void;
 }
 
 interface ImageAttachment {
@@ -94,14 +94,14 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
             ...prev,
             {
               role: "assistant",
-              content: `📸 **${imagesToUpload.length} image${imagesToUpload.length > 1 ? "s" : ""} processed** — notes have been updated with the new content.`,
+              content: `📸 **${imagesToUpload.length} image${imagesToUpload.length > 1 ? "s" : ""} uploaded** — processing and updating study notes in the background...`,
             },
           ]);
         })
         .catch(() => {
           setMessages((prev) => [
             ...prev,
-            { role: "assistant", content: "Failed to process uploaded images. Try again." },
+            { role: "assistant", content: "Failed to upload images. Try again." },
           ]);
         })
         .finally(() => setUploading(false));

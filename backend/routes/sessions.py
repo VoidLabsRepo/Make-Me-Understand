@@ -83,14 +83,40 @@ async def create_session(
     }
 
 
+async def process_append_images_background(session_id: int, image_bytes: list[bytes], existing_notes: str):
+    try:
+        extracted = await extract_images(image_bytes)
+        new_notes = await synthesize_notes(extracted)
+
+        merged = existing_notes + "\n\n---\n\n" + new_notes if existing_notes else new_notes
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                "UPDATE sessions SET notes = ? WHERE id = ?",
+                (merged, session_id),
+            )
+            await db.commit()
+    except Exception as e:
+        traceback.print_exc()
+        error_msg = f"ERROR: Failed to process study material. {str(e)}"
+        async with aiosqlite.connect(DB_PATH) as db:
+            error_merged = existing_notes + "\n\n---\n\n⚠️ Failed to process new images. Try again." if existing_notes else error_msg
+            await db.execute(
+                "UPDATE sessions SET notes = ? WHERE id = ?",
+                (error_merged, session_id),
+            )
+            await db.commit()
+
+
 @router.post("/{session_id}/append-images")
 async def append_images(
     session_id: int,
+    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     """Append new images to an existing session — extract text, synthesize
-    additional notes, and merge them with the current notes."""
+    additional notes, and merge them with the current notes in the background."""
     cursor = await db.execute(
         "SELECT notes FROM sessions WHERE id = ?", (session_id,)
     )
@@ -102,36 +128,26 @@ async def append_images(
 
     image_bytes = []
     for f in files:
-        content = await f.read()
-        image_bytes.append(content)
+        if f.filename:
+            content = await f.read()
+            image_bytes.append(content)
 
-    try:
-        extracted = await extract_images(image_bytes)
-    except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=502,
-            content={"detail": f"Image extraction failed: {e}"},
-        )
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="No valid images uploaded")
 
-    try:
-        new_notes = await synthesize_notes(extracted)
-    except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=502,
-            content={"detail": f"Note synthesis failed: {e}"},
-        )
-
-    merged = existing_notes + "\n\n---\n\n" + new_notes if existing_notes else new_notes
-
+    # Set notes to NULL immediately so frontend starts polling
     await db.execute(
-        "UPDATE sessions SET notes = ? WHERE id = ?",
-        (merged, session_id),
+        "UPDATE sessions SET notes = NULL WHERE id = ?",
+        (session_id,),
     )
     await db.commit()
 
-    return {"notes": merged}
+    # Queue background task to process images and update notes
+    background_tasks.add_task(
+        process_append_images_background, session_id, image_bytes, existing_notes
+    )
+
+    return {"notes": None}
 
 
 @router.get("")
