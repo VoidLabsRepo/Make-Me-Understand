@@ -107,7 +107,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
       const audio = new Audio(url);
       audioRef.current = audio;
 
-      audio.onplay = () => {
+      audio.onplaying = () => {
         if (!controller.signal.aborted) {
           setPersonaState("speaking");
         }
