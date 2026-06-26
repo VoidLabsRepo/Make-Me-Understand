@@ -144,8 +144,8 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
   const startListening = useCallback(() => {
     if (personaState === "speaking" || personaState === "thinking") {
       stopAll();
-      setTranscript("");
     }
+    setTranscript("");
     setAiSubtitle("");
     setWordTimings([]);
 
@@ -235,16 +235,16 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
         </div>
 
         <div className="pb-16 flex flex-col items-center gap-4 w-full max-w-md">
-          {personaState === "listening" && transcript && (
+          {transcript && (
             <div className="text-sm text-muted-foreground text-center px-4 italic">
               "{transcript}"
             </div>
           )}
 
-          {personaState === "speaking" && wordTimings.length > 0 && (
+          {wordTimings.length > 0 && (
             <div className="bg-transparent border-none shadow-none text-center px-6 max-h-[140px] overflow-y-auto leading-relaxed max-w-lg antialiased tracking-wide text-lg md:text-xl font-medium transition-all duration-300">
               {wordTimings.map((item, idx) => {
-                const isSpoken = audioCurrentTime >= item.start;
+                const isSpoken = personaState === "idle" || audioCurrentTime >= item.start;
                 return (
                   <span
                     key={idx}
