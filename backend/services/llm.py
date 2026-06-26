@@ -102,7 +102,9 @@ async def voice_explain(notes: str, question: str) -> str:
                 "You are explaining study material aloud. Give a clear, spoken explanation. "
                 "Use natural speech patterns. Be conversational but informative. "
                 "Keep responses under 300 words for voice output. "
-                "Do NOT use any markdown formatting — no *, #, |, backticks, or bullet symbols. Output plain text only."
+                "Output PLAIN TEXT ONLY. No markdown, no formatting symbols, no tables, no bullet points, "
+                "no emojis, no special characters. Just write as if you are speaking naturally to someone. "
+                "A single paragraph is ideal."
             ),
         },
         {"role": "user", "content": f"Based on these notes:\n{notes}\n\nExplain: {question}"},

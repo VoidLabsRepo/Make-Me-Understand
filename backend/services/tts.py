@@ -9,7 +9,9 @@ _pipeline = None
 def _get_pipeline():
     global _pipeline
     if _pipeline is None:
-        _pipeline = KPipeline(lang_code="a")
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        _pipeline = KPipeline(lang_code="a", device=device)
     return _pipeline
 
 
@@ -20,6 +22,9 @@ async def generate_tts(text: str) -> bytes:
 
     all_audio = []
     for _, _, audio in generator:
+        import torch
+        if isinstance(audio, torch.Tensor):
+            audio = audio.cpu().numpy()
         all_audio.append(audio)
 
     combined = np.concatenate(all_audio)

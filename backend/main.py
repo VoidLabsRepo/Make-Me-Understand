@@ -23,7 +23,7 @@ fastapi_app.include_router(chat_router)
 # Wrap app so CORS headers apply even on 500s (official Starlette recommendation)
 app = CORSMiddleware(
     fastapi_app,
-    allow_origins=["http://localhost:3007"],
+    allow_origins=["http://localhost:3007", "https://mmu.voidlabs.in"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

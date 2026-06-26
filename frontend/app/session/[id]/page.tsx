@@ -226,7 +226,7 @@ export default function SessionPage() {
           layout
           variants={chatVariants}
           animate={notesOpen && !isMobile ? "wide" : "full"}
-          className="min-w-0 bg-white rounded-2xl border overflow-hidden flex flex-col"
+          className="min-w-0 min-h-0 bg-white rounded-2xl border overflow-hidden flex flex-col"
         >
           <ChatPanel
             sessionId={session.id}

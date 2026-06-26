@@ -14,11 +14,15 @@ export interface SessionListItem {
   created_at: string;
 }
 
-export async function createSession(files: File[]): Promise<Session> {
+export async function createSession(
+  files: File[],
+  onStep?: (step: "uploading" | "extracting" | "synthesizing") => void,
+): Promise<Session> {
   const form = new FormData();
   for (const file of files) {
     form.append("files", file);
   }
+  onStep?.("uploading");
   const res = await fetch(`${API_BASE}/api/sessions`, { method: "POST", body: form });
   if (!res.ok) throw new Error("Failed to create session");
   return res.json();
