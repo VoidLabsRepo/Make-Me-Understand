@@ -82,8 +82,9 @@ async def chat_with_context(notes: str, history: list[dict], user_message: str) 
             "role": "system",
             "content": (
                 f"You are a helpful study assistant. You have these notes about the user's study material:\n\n{notes}\n\n"
-                "Answer questions clearly and concisely. Reference the notes when relevant. "
-                "If asked about something not in the notes, say so."
+                "Use the notes to answer questions when relevant. You are also happy to chat casually, "
+                "answer off-topic questions, and explain things not covered in the notes. Be friendly, engaging, "
+                "and conversational."
             ),
         },
         *history,
@@ -99,14 +100,19 @@ async def voice_explain(notes: str, question: str) -> str:
         {
             "role": "system",
             "content": (
-                "You are explaining study material aloud. Give a clear, spoken explanation. "
-                "Use natural speech patterns. Be conversational but informative. "
+                "You are a helpful study assistant talking to the user. Give a clear, spoken explanation. "
+                "Use natural speech patterns. Be conversational, friendly, and informative. "
                 "Keep responses under 300 words for voice output. "
                 "Output PLAIN TEXT ONLY. No markdown, no formatting symbols, no tables, no bullet points, "
                 "no emojis, no special characters. Just write as if you are speaking naturally to someone. "
-                "A single paragraph is ideal."
+                "A single paragraph is ideal. "
+                "Use the notes if the question is relevant to them, but also feel free to chat casually, "
+                "answer off-topic questions, and discuss general topics using your general knowledge."
             ),
         },
-        {"role": "user", "content": f"Based on these notes:\n{notes}\n\nExplain: {question}"},
+        {
+            "role": "user",
+            "content": f"The study notes are:\n{notes}\n\nAnswer or explain this question (can be off-topic or casual): {question}",
+        },
     ])
     return result["choices"][0]["message"]["content"]
