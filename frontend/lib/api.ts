@@ -61,6 +61,17 @@ export async function sendMessage(sessionId: number, message: string): Promise<s
   return data.response;
 }
 
+export async function sendVoiceMessage(sessionId: number, message: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/voice-chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) throw new Error("Failed to send voice message");
+  const data = await res.json();
+  return data.response;
+}
+
 export async function generateTTS(sessionId: number, question: string): Promise<Blob> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/tts`, {
     method: "POST",

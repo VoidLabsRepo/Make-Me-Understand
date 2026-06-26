@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Persona } from "@/components/ai-elements/persona";
 import type { PersonaState } from "@/components/ai-elements/persona";
-import { sendMessage } from "@/lib/api";
+import { sendVoiceMessage } from "@/lib/api";
 
 interface VoiceModeProps {
   sessionId: number;
@@ -90,7 +90,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
       setAiSubtitle("");
 
       // 1. Fetch LLM response first to get subtitle text & save chat messages
-      const responseText = await sendMessage(sessionId, question);
+      const responseText = await sendVoiceMessage(sessionId, question);
       if (controller.signal.aborted) return;
 
       setAiSubtitle(responseText);
@@ -236,7 +236,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
           )}
 
           {personaState === "speaking" && aiSubtitle && (
-            <div className="text-base md:text-lg text-center px-6 max-h-[140px] overflow-y-auto leading-relaxed max-w-lg transition-all duration-300">
+            <div className="bg-transparent border-none shadow-none text-center px-6 max-h-[140px] overflow-y-auto leading-relaxed max-w-lg antialiased tracking-wide text-lg md:text-xl font-medium transition-all duration-300">
               {(() => {
                 const words = aiSubtitle.split(/(\s+)/);
                 let wordCount = 0;
@@ -256,9 +256,11 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
                       key={idx}
                       className={
                         isWord
-                          ? highlight
-                            ? "text-slate-800 font-semibold transition-colors duration-150"
-                            : "text-slate-400/50 transition-colors duration-150"
+                          ? `inline-block transition-all duration-500 ease-out ${
+                              highlight
+                                ? "text-slate-800 opacity-100 translate-y-0 scale-100"
+                                : "opacity-0 translate-y-2 scale-95 pointer-events-none"
+                            }`
                           : undefined
                       }
                     >

@@ -2,6 +2,7 @@ import httpx
 import os
 import base64
 import json
+import re
 
 OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY", "")
 OPENCODE_BASE_URL = "https://opencode.ai/zen/go/v1"
@@ -116,3 +117,36 @@ async def voice_explain(notes: str, question: str) -> str:
         },
     ])
     return result["choices"][0]["message"]["content"]
+
+
+async def voice_chat_with_context(notes: str, history: list[dict], user_message: str) -> str:
+    """Generate a voice-friendly explanation with chat history and context."""
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                f"You are a helpful study assistant talking to the user. You have these notes about the user's study material:\n\n{notes}\n\n"
+                "Use the notes to answer questions when relevant, but also feel free to chat casually, answer off-topic questions, and discuss general topics. "
+                "Give a clear, spoken explanation. Use natural speech patterns. Be conversational and friendly.\n"
+                "CRITICAL: Keep responses under 150 words for voice output. A single paragraph is ideal. "
+                "Output PLAIN TEXT ONLY. Do NOT use markdown (no asterisks, no hash signs, no bullet points), "
+                "no emojis, no dashes/separators, no formatting symbols. Just write the exact words as they should be spoken naturally."
+            ),
+        },
+        *history,
+        {"role": "user", "content": user_message},
+    ]
+    result = await chat_completion(messages)
+    return result["choices"][0]["message"]["content"]
+
+
+def clean_voice_text(text: str) -> str:
+    # 1. Remove markdown bold/italic asterisks
+    text = text.replace("*", "")
+    # 2. Remove emojis
+    text = re.sub(r'[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDC00-\uDFFF]', '', text)
+    # 3. Remove dashes/separators like "--", "---"
+    text = re.sub(r'-{2,}', ' ', text)
+    # 4. Clean up any extra whitespaces
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
