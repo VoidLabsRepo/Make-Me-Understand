@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Persona } from "@/components/ai-elements/persona";
 import type { PersonaState } from "@/components/ai-elements/persona";
+import { sendMessage } from "@/lib/api";
 
 interface VoiceModeProps {
   sessionId: number;
@@ -13,6 +14,10 @@ interface VoiceModeProps {
 export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
   const [personaState, setPersonaState] = useState<PersonaState>("idle");
   const [transcript, setTranscript] = useState("");
+  const [aiSubtitle, setAiSubtitle] = useState("");
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
@@ -50,6 +55,8 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
       const el = audioRef.current as any;
       if (el.onended !== undefined) el.onended = null;
       if (el.onerror !== undefined) el.onerror = null;
+      if (el.ontimeupdate !== undefined) el.ontimeupdate = null;
+      if (el.onloadedmetadata !== undefined) el.onloadedmetadata = null;
       audioRef.current.pause();
       audioRef.current.src = "";
       audioRef.current.load();
@@ -59,6 +66,8 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
       URL.revokeObjectURL(audioUrlRef.current);
       audioUrlRef.current = null;
     }
+    setAudioCurrentTime(0);
+    setAudioDuration(0);
   }, []);
 
   const stopAll = useCallback(() => {
@@ -67,32 +76,8 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
     killAudio();
     abortRef.current?.abort();
     abortRef.current = null;
+    setAiSubtitle("");
   }, [killAudio]);
-
-  // Fallback: decode and play via Web Audio API (bypasses autoplay restrictions
-  // because AudioContext was unlocked during the original user gesture)
-  const playViaWebAudio = useCallback(async (blob: Blob) => {
-    const ctx = getAudioCtx();
-    if (ctx.state === "suspended") await ctx.resume();
-    const arrayBuf = await blob.arrayBuffer();
-    const audioBuf = await ctx.decodeAudioData(arrayBuf);
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuf;
-    source.connect(ctx.destination);
-    source.onended = () => {
-      setPersonaState("idle");
-    };
-    source.start();
-    // Store a kill handle — null onended before stopping so it doesn't
-    // race with the new state when we interrupt intentionally
-    audioRef.current = {
-      pause: () => {
-        try { source.onended = null; source.stop(); source.disconnect(); } catch {}
-      },
-      src: "",
-      load: () => {},
-    } as any;
-  }, [getAudioCtx]);
 
   const speakResponse = useCallback(async (question: string) => {
     abortRef.current?.abort();
@@ -102,14 +87,34 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
     try {
       setPersonaState("thinking");
       killAudio();
+      setAiSubtitle("");
 
-      const url = `/api/sessions/${sessionId}/tts?question=${encodeURIComponent(question)}`;
+      // 1. Fetch LLM response first to get subtitle text & save chat messages
+      const responseText = await sendMessage(sessionId, question);
+      if (controller.signal.aborted) return;
+
+      setAiSubtitle(responseText);
+
+      // 2. Play TTS passing the pre-generated text (zero additional LLM latency)
+      const url = `/api/sessions/${sessionId}/tts?text=${encodeURIComponent(responseText)}`;
       const audio = new Audio(url);
       audioRef.current = audio;
 
       audio.onplaying = () => {
         if (!controller.signal.aborted) {
           setPersonaState("speaking");
+        }
+      };
+
+      audio.ontimeupdate = () => {
+        if (!controller.signal.aborted) {
+          setAudioCurrentTime(audio.currentTime);
+        }
+      };
+
+      audio.onloadedmetadata = () => {
+        if (!controller.signal.aborted) {
+          setAudioDuration(audio.duration || 0);
         }
       };
 
@@ -136,6 +141,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
       stopAll();
       setTranscript("");
     }
+    setAiSubtitle("");
 
     // Unlock audio on the user gesture so playback later succeeds
     unlockAudio();
@@ -204,7 +210,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
       <div className="absolute top-3 left-3 z-10">
         <button
           onClick={(e) => { e.stopPropagation(); stopAll(); onClose(); }}
-          className="px-4 py-2 rounded-full bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors"
+          className="px-4 py-2 rounded-full bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors cursor-pointer"
         >
           Close
         </button>
@@ -222,12 +228,48 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
           <Persona variant="halo" state={personaState} className="size-64" forceColor={[0, 0, 0]} />
         </div>
 
-        <div className="pb-16 flex flex-col items-center gap-3 w-full max-w-md">
-          {transcript && (
-            <div className="text-sm text-muted-foreground text-center px-4">
-              {transcript}
+        <div className="pb-16 flex flex-col items-center gap-4 w-full max-w-md">
+          {personaState === "listening" && transcript && (
+            <div className="text-sm text-muted-foreground text-center px-4 italic">
+              "{transcript}"
             </div>
           )}
+
+          {personaState === "speaking" && aiSubtitle && (
+            <div className="text-base md:text-lg text-center px-6 max-h-[140px] overflow-y-auto leading-relaxed max-w-lg transition-all duration-300">
+              {(() => {
+                const words = aiSubtitle.split(/(\s+)/);
+                let wordCount = 0;
+                const wordsOnlyCount = aiSubtitle.split(/\s+/).filter(Boolean).length;
+                const ratio = audioDuration ? audioCurrentTime / audioDuration : 0;
+                const highlightedIndex = Math.floor(ratio * wordsOnlyCount);
+
+                return words.map((part, idx) => {
+                  const isWord = /\S/.test(part);
+                  let highlight = false;
+                  if (isWord) {
+                    highlight = wordCount <= highlightedIndex;
+                    wordCount++;
+                  }
+                  return (
+                    <span
+                      key={idx}
+                      className={
+                        isWord
+                          ? highlight
+                            ? "text-slate-800 font-semibold transition-colors duration-150"
+                            : "text-slate-400/50 transition-colors duration-150"
+                          : undefined
+                      }
+                    >
+                      {part}
+                    </span>
+                  );
+                });
+              })()}
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground">
             {personaState === "listening"
               ? "Listening... release to send"
