@@ -170,6 +170,10 @@ export default function SessionPage() {
 
   const closeNotes = useCallback(() => setNotesOpen(false), []);
 
+  const handleNotesUpdated = useCallback((notes: string) => {
+    setSession((prev) => prev ? { ...prev, notes } : prev);
+  }, []);
+
   if (!session) {
     return (
       <div className="h-dvh flex items-center justify-center text-muted-foreground">
@@ -232,6 +236,7 @@ export default function SessionPage() {
             sessionId={session.id}
             initialMessages={session.messages || []}
             onVoiceMode={() => setVoiceMode(true)}
+            onNotesUpdated={handleNotesUpdated}
           />
         </motion.div>
 

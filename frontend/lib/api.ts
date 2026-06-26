@@ -60,3 +60,18 @@ export async function generateTTS(sessionId: number, question: string): Promise<
   if (!res.ok) throw new Error("Failed to generate TTS");
   return res.blob();
 }
+
+export async function appendImages(sessionId: number, files: File[]): Promise<string> {
+  const form = new FormData();
+  for (const file of files) {
+    form.append("files", file);
+  }
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/append-images`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) throw new Error("Failed to append images");
+  const data = await res.json();
+  return data.notes;
+}
+

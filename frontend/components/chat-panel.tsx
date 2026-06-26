@@ -3,49 +3,127 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { sendMessage } from "@/lib/api";
+import { sendMessage, appendImages } from "@/lib/api";
 import { Persona } from "@/components/ai-elements/persona";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
-import { Plus, Send } from "lucide-react";
+import { Plus, Send, Paperclip, Image as ImageIcon, X, Loader2 } from "lucide-react";
 
 interface ChatPanelProps {
   sessionId: number;
   initialMessages: { role: string; content: string }[];
   onVoiceMode?: () => void;
+  onNotesUpdated?: (notes: string) => void;
 }
 
-export function ChatPanel({ sessionId, initialMessages, onVoiceMode }: ChatPanelProps) {
+interface ImageAttachment {
+  file: File;
+  preview: string;
+}
+
+export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpdated }: ChatPanelProps) {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLongPressRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Cleanup previews on unmount
+  useEffect(() => {
+    return () => {
+      attachments.forEach((a) => URL.revokeObjectURL(a.preview));
+    };
+  }, []);
+
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const newAttachments: ImageAttachment[] = Array.from(files)
+      .filter((f) => f.type.startsWith("image/"))
+      .map((file) => ({
+        file,
+        preview: URL.createObjectURL(file),
+      }));
+    if (newAttachments.length > 0) {
+      setAttachments((prev) => [...prev, ...newAttachments]);
+      setExpanded(false); // collapse toolbar after selecting
+    }
+  }, []);
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => {
+      URL.revokeObjectURL(prev[index].preview);
+      return prev.filter((_, i) => i !== index);
+    });
+  }, []);
+
+  const clearAttachments = useCallback(() => {
+    setAttachments((prev) => {
+      prev.forEach((a) => URL.revokeObjectURL(a.preview));
+      return [];
+    });
+  }, []);
+
   const handleSend = async (text?: string) => {
     const msg = (text ?? input).trim();
-    if (!msg || loading) return;
+    const hasImages = attachments.length > 0;
 
-    setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: msg }]);
-    setLoading(true);
+    if (!msg && !hasImages) return;
+    if (loading) return;
 
-    try {
-      const response = await sendMessage(sessionId, msg);
-      setMessages((prev) => [...prev, { role: "assistant", content: response }]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Failed to get response. Try again." },
-      ]);
-    } finally {
-      setLoading(false);
+    // If there are images, fire off the notes update in parallel
+    if (hasImages) {
+      const imagesToUpload = attachments.map((a) => a.file);
+      setUploading(true);
+      clearAttachments();
+
+      // Fire and forget — runs in background, updates notes when done
+      appendImages(sessionId, imagesToUpload)
+        .then((updatedNotes) => {
+          onNotesUpdated?.(updatedNotes);
+          // Add a system-like message to chat
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `📸 **${imagesToUpload.length} image${imagesToUpload.length > 1 ? "s" : ""} processed** — notes have been updated with the new content.`,
+            },
+          ]);
+        })
+        .catch(() => {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: "Failed to process uploaded images. Try again." },
+          ]);
+        })
+        .finally(() => setUploading(false));
+    }
+
+    // If there's also a text message, send it as chat
+    if (msg) {
+      setInput("");
+      setMessages((prev) => [...prev, { role: "user", content: msg }]);
+      setLoading(true);
+
+      try {
+        const response = await sendMessage(sessionId, msg);
+        setMessages((prev) => [...prev, { role: "assistant", content: response }]);
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Failed to get response. Try again." },
+        ]);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -115,6 +193,8 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode }: ChatPanel
     };
   }, []);
 
+  const hasContent = input.trim() || attachments.length > 0;
+
   return (
     <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
       {/* Messages */}
@@ -154,32 +234,110 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode }: ChatPanel
         <div ref={bottomRef} />
       </div>
 
-      {/* Input bar */}
+      {/* Input area */}
       <div className="px-3 md:px-5 pb-3 md:pb-5 shrink-0">
-        <div className="flex items-center gap-2 md:gap-3">
-          <div className="flex-1 flex items-center gap-2 md:gap-3 border rounded-full px-3 md:px-4 py-2.5 md:py-3 bg-white min-w-0">
-            <button
-              type="button"
-              className="hidden md:flex w-8 h-8 rounded-full bg-muted items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors shrink-0"
-            >
-              <Plus size={18} />
-            </button>
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-              placeholder={recording ? "Listening..." : "Ask anything..."}
-              disabled={loading}
-              className="flex-1 min-w-0 bg-transparent outline-none text-sm md:text-base placeholder:text-muted-foreground"
-            />
-            <button
-              onClick={() => handleSend()}
-              disabled={loading || !input.trim()}
-              className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors disabled:opacity-30 shrink-0"
-            >
-              <Send size={18} />
-            </button>
+        {/* Image attachment thumbnails */}
+        {attachments.length > 0 && (
+          <div className="flex gap-2 mb-2 px-1 overflow-x-auto pb-1">
+            {attachments.map((att, i) => (
+              <div key={i} className="relative shrink-0 group">
+                <img
+                  src={att.preview}
+                  alt={att.file.name}
+                  className="w-16 h-16 md:w-20 md:h-20 rounded-xl object-cover border border-border/50"
+                />
+                <button
+                  onClick={() => removeAttachment(i)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
           </div>
+        )}
+
+        {/* Uploading indicator */}
+        {uploading && (
+          <div className="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium">
+            <Loader2 size={12} className="animate-spin" />
+            Processing images & updating notes...
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className={`flex-1 flex flex-col border rounded-2xl bg-white min-w-0 transition-all ${expanded ? "rounded-2xl" : "rounded-full"}`}>
+            {/* Expanded toolbar */}
+            {expanded && (
+              <div className="flex items-center gap-1 px-3 pt-2.5 pb-1">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:bg-muted/60 transition-colors"
+                >
+                  <Plus size={14} />
+                  Attach files
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted/60 transition-colors"
+                >
+                  <ImageIcon size={16} />
+                </button>
+              </div>
+            )}
+
+            <div className={`flex items-center gap-2 md:gap-3 px-3 md:px-4 ${expanded ? "py-2" : "py-2.5 md:py-3"}`}>
+              <button
+                type="button"
+                onClick={() => setExpanded(!expanded)}
+                className={`hidden md:flex w-8 h-8 rounded-full items-center justify-center text-muted-foreground transition-all shrink-0 ${
+                  expanded
+                    ? "bg-foreground text-background rotate-45"
+                    : "bg-muted hover:bg-muted/80"
+                }`}
+              >
+                <Plus size={18} />
+              </button>
+              {/* Mobile: direct file trigger */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="md:hidden flex w-8 h-8 rounded-full bg-muted items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors shrink-0"
+              >
+                <Plus size={18} />
+              </button>
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+                placeholder={recording ? "Listening..." : "Ask anything..."}
+                disabled={loading}
+                className="flex-1 min-w-0 bg-transparent outline-none text-sm md:text-base placeholder:text-muted-foreground"
+              />
+              <button
+                onClick={() => handleSend()}
+                disabled={loading || !hasContent}
+                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors disabled:opacity-30 shrink-0"
+              >
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
 
           {/* Halo: tap = voice mode, long press = push-to-talk */}
           <button

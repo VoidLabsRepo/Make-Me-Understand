@@ -44,6 +44,12 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
 
   const killAudio = useCallback(() => {
     if (audioRef.current) {
+      // Null handlers BEFORE clearing source — otherwise setting src="" and
+      // calling load() fires onerror, which triggers the Web Audio fallback
+      // and re-plays the same audio (the "repeating" bug on interrupt).
+      const el = audioRef.current as any;
+      if (el.onended !== undefined) el.onended = null;
+      if (el.onerror !== undefined) el.onerror = null;
       audioRef.current.pause();
       audioRef.current.src = "";
       audioRef.current.load();
@@ -77,8 +83,15 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
       setPersonaState("idle");
     };
     source.start();
-    // Store a kill handle
-    audioRef.current = { pause: () => source.stop(), src: "", load: () => {} } as any;
+    // Store a kill handle — null onended before stopping so it doesn't
+    // race with the new state when we interrupt intentionally
+    audioRef.current = {
+      pause: () => {
+        try { source.onended = null; source.stop(); source.disconnect(); } catch {}
+      },
+      src: "",
+      load: () => {},
+    } as any;
   }, [getAudioCtx]);
 
   const speakResponse = useCallback(async (question: string) => {
