@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import aiosqlite
 from database import get_db
 from services.llm import chat_with_context, voice_explain
-from services.tts import generate_tts
+from services.tts import generate_tts, stream_tts, make_wav_header
 
 router = APIRouter(prefix="/api/sessions", tags=["chat"])
 
@@ -81,6 +81,39 @@ async def tts(
     audio_bytes = await generate_tts(text_to_speak)
     return StreamingResponse(
         iter([audio_bytes]),
+        media_type="audio/wav",
+        headers={"Content-Disposition": "attachment; filename=tts.wav"},
+    )
+
+
+@router.get("/{session_id}/tts")
+async def tts_get(
+    session_id: int,
+    question: str | None = None,
+    text: str | None = None,
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    cursor = await db.execute("SELECT notes FROM sessions WHERE id = ?", (session_id,))
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    notes = row["notes"] or ""
+    text_to_speak = text
+
+    if question and not text_to_speak:
+        text_to_speak = await voice_explain(notes, question)
+
+    if not text_to_speak:
+        raise HTTPException(status_code=400, detail="Provide text or question")
+
+    async def generate_audio_stream():
+        yield make_wav_header(sample_rate=24000, num_channels=1, bits_per_sample=16)
+        async for chunk in stream_tts(text_to_speak):
+            yield chunk
+
+    return StreamingResponse(
+        generate_audio_stream(),
         media_type="audio/wav",
         headers={"Content-Disposition": "attachment; filename=tts.wav"},
     )

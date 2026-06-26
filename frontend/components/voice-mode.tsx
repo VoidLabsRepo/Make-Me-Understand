@@ -101,53 +101,35 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
 
     try {
       setPersonaState("thinking");
-
-      // ponytail: single backend call — voice_explain generates short plain text, then TTS
-      const ttsRes = await fetch(`/api/sessions/${sessionId}/tts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
-        signal: controller.signal,
-      });
-
-      if (!ttsRes.ok || controller.signal.aborted) return;
-
-      const blob = await ttsRes.blob();
-      if (controller.signal.aborted) return;
-
       killAudio();
-      setPersonaState("speaking");
 
-      // Try HTMLAudioElement first, fall back to Web Audio API
-      try {
-        const url = URL.createObjectURL(blob);
-        audioUrlRef.current = url;
-        const audio = new Audio(url);
-        audioRef.current = audio;
+      const url = `/api/sessions/${sessionId}/tts?question=${encodeURIComponent(question)}`;
+      const audio = new Audio(url);
+      audioRef.current = audio;
 
-        audio.onended = () => {
-          killAudio();
-          setPersonaState("idle");
-        };
+      audio.onplay = () => {
+        if (!controller.signal.aborted) {
+          setPersonaState("speaking");
+        }
+      };
 
-        audio.onerror = () => {
-          // HTMLAudioElement failed to load — try Web Audio API fallback
-          killAudio();
-          playViaWebAudio(blob).catch(() => setPersonaState("idle"));
-        };
-
-        await audio.play();
-      } catch {
-        // audio.play() rejected (autoplay policy) — use Web Audio API fallback
+      audio.onended = () => {
         killAudio();
-        await playViaWebAudio(blob);
-      }
+        setPersonaState("idle");
+      };
+
+      audio.onerror = () => {
+        killAudio();
+        setPersonaState("idle");
+      };
+
+      await audio.play();
     } catch (err: any) {
       if (err.name !== "AbortError") {
         setPersonaState("idle");
       }
     }
-  }, [sessionId, killAudio, playViaWebAudio]);
+  }, [sessionId, killAudio]);
 
   const startListening = useCallback(() => {
     if (personaState === "speaking" || personaState === "thinking") {
