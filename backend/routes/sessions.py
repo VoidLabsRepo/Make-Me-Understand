@@ -1,5 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 import aiosqlite
 from database import get_db, DB_PATH
 from services.llm import extract_images, synthesize_notes
@@ -186,4 +187,38 @@ async def get_session(session_id: int, db: aiosqlite.Connection = Depends(get_db
         "created_at": row["created_at"],
         "messages": messages,
     }
+
+
+class RenameRequest(BaseModel):
+    title: str
+
+
+@router.patch("/{session_id}")
+async def rename_session(
+    session_id: int,
+    body: RenameRequest,
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    cursor = await db.execute("SELECT id FROM sessions WHERE id = ?", (session_id,))
+    if not await cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    await db.execute("UPDATE sessions SET title = ? WHERE id = ?", (body.title, session_id))
+    await db.commit()
+    return {"id": session_id, "title": body.title}
+
+
+@router.delete("/{session_id}")
+async def delete_session(
+    session_id: int,
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    cursor = await db.execute("SELECT id FROM sessions WHERE id = ?", (session_id,))
+    if not await cursor.fetchone():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    await db.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+    await db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    await db.commit()
+    return {"ok": True}
 

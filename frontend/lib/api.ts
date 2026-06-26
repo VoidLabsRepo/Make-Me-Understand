@@ -106,3 +106,19 @@ export async function appendImages(sessionId: number, files: File[]): Promise<st
   return data.notes;
 }
 
+export async function renameSession(id: number, title: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error("Failed to rename session");
+}
+
+export async function deleteSession(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete session");
+}
+

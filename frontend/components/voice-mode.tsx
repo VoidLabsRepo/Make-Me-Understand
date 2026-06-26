@@ -26,6 +26,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
   const transcriptRef = useRef("");
   const abortRef = useRef<AbortController | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const subtitleRef = useRef<HTMLDivElement>(null);
 
   // Get or create a shared AudioContext (unlocked on user gesture)
   const getAudioCtx = useCallback(() => {
@@ -211,6 +212,13 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
     };
   }, [stopAll]);
 
+  // Auto-scroll subtitles as words appear
+  useEffect(() => {
+    if (subtitleRef.current) {
+      subtitleRef.current.scrollTop = subtitleRef.current.scrollHeight;
+    }
+  }, [audioCurrentTime]);
+
   return (
     <div className="flex flex-col h-full w-full relative">
       <div className="absolute top-3 left-3 z-10">
@@ -242,7 +250,7 @@ export function VoiceMode({ sessionId, notes, onClose }: VoiceModeProps) {
           )}
 
           {wordTimings.length > 0 && (
-            <div className="bg-transparent border-none shadow-none text-center px-6 max-h-[140px] overflow-y-auto leading-relaxed max-w-lg antialiased tracking-wide text-lg md:text-xl font-medium transition-all duration-300">
+            <div ref={subtitleRef} className="bg-transparent border-none shadow-none text-center px-6 max-h-[140px] overflow-y-auto leading-relaxed max-w-lg antialiased tracking-wide text-lg md:text-xl font-medium transition-all duration-300">
               {wordTimings.map((item, idx) => {
                 const isSpoken = personaState === "idle" || audioCurrentTime >= item.start;
                 return (
