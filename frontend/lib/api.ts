@@ -20,8 +20,13 @@ export async function createSession(
   signal?: AbortSignal,
 ): Promise<Session> {
   const form = new FormData();
-  for (const file of files) {
-    form.append("files", file);
+  if (files.length === 0) {
+    // Append dummy field to ensure browser constructs a valid multipart/form-data payload
+    form.append("empty", "true");
+  } else {
+    for (const file of files) {
+      form.append("files", file);
+    }
   }
   onStep?.("uploading");
   const res = await fetch(`${API_BASE}/api/sessions`, {

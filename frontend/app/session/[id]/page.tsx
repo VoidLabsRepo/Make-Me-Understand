@@ -170,12 +170,12 @@ export default function SessionPage() {
 
   useEffect(() => {
     const id = Number(params.id);
-    if (!id || !session || session.notes) return;
+    if (!id || !session || session.notes !== null) return;
 
     const interval = setInterval(async () => {
       try {
         const data = await getSession(id);
-        if (data.notes) {
+        if (data.notes !== null) {
           setSession(data);
           clearInterval(interval);
         }

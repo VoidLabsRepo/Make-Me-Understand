@@ -81,6 +81,22 @@ export function UploadDialog() {
     }
   };
 
+  const handleSkipUpload = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const session = await createSession([], undefined, undefined);
+      setOpen(false);
+      resetDialog();
+      router.push(`/session/${session.id}`);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Failed to create empty session. Please check your connection.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const resetDialog = () => {
     setFiles([]);
     setStep("idle");
@@ -208,10 +224,21 @@ export function UploadDialog() {
             <Button
               onClick={handleUpload}
               disabled={!files.length}
-              className="w-full"
+              className="w-full font-medium"
             >
               Create Session
             </Button>
+
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={handleSkipUpload}
+                disabled={loading}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 cursor-pointer transition-colors"
+              >
+                Skip and start with an empty session
+              </button>
+            </div>
           </>
         ) : (
           <div className="py-6 space-y-4">

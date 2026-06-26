@@ -41,16 +41,21 @@ async def process_session_background(session_id: int, image_bytes: list[bytes]):
 @router.post("")
 async def create_session(
     background_tasks: BackgroundTasks,
-    files: list[UploadFile] = File(...),
+    files: list[UploadFile] = File(default=[]),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     # Read all uploaded images
     image_bytes = []
     for f in files:
-        content = await f.read()
-        image_bytes.append(content)
+        if f.filename:
+            content = await f.read()
+            image_bytes.append(content)
 
-    title = files[0].filename.split(".")[0] if files else "Untitled Session"
+    title = "New Session"
+    if files and len(image_bytes) > 0:
+        first_file = files[0]
+        if first_file.filename:
+            title = first_file.filename.split(".")[0]
 
     # Insert immediate session with null notes
     cursor = await db.execute(
@@ -60,13 +65,21 @@ async def create_session(
     await db.commit()
     session_id = cursor.lastrowid
 
-    # Queue background task
-    background_tasks.add_task(process_session_background, session_id, image_bytes)
+    # Queue background task only if files were uploaded
+    if image_bytes:
+        background_tasks.add_task(process_session_background, session_id, image_bytes)
+    else:
+        # If empty session, update notes to empty string immediately
+        await db.execute(
+            "UPDATE sessions SET notes = ? WHERE id = ?",
+            ("", session_id),
+        )
+        await db.commit()
 
     return {
         "id": session_id,
         "title": title,
-        "notes": None,
+        "notes": "" if not image_bytes else None,
     }
 
 
