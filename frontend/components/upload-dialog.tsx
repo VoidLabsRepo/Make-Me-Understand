@@ -9,7 +9,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Upload, X, Loader2, Check, AlertTriangle } from "lucide-react";
+import { Upload, X, Loader2, Check, AlertTriangle, AlertCircle } from "lucide-react";
 import { createSession } from "@/lib/api";
 import { useRouter } from "next/navigation";
 
@@ -27,6 +27,7 @@ export function UploadDialog() {
   const [step, setStep] = useState<UploadStep>("idle");
   const [open, setOpen] = useState(false);
   const [showConfirmCancel, setShowConfirmCancel] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const router = useRouter();
@@ -46,6 +47,7 @@ export function UploadDialog() {
     setLoading(true);
     setStep("uploading");
     setShowConfirmCancel(false);
+    setError(null);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -70,6 +72,7 @@ export function UploadDialog() {
         console.log("Upload aborted by user.");
       } else {
         console.error(err);
+        setError(err.message || "Failed to create session. Please check your connection.");
       }
       setStep("idle");
     } finally {
@@ -83,6 +86,7 @@ export function UploadDialog() {
     setStep("idle");
     setLoading(false);
     setShowConfirmCancel(false);
+    setError(null);
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -160,6 +164,12 @@ export function UploadDialog() {
           </div>
         ) : step === "idle" ? (
           <>
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 text-xs rounded-xl p-3 flex items-start gap-2 animate-in fade-in-50 duration-200">
+                <AlertCircle className="shrink-0 size-4 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
             <div
               onClick={() => inputRef.current?.click()}
               className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer hover:border-muted-foreground/50 transition-colors"

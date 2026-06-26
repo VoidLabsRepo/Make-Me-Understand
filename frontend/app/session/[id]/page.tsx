@@ -168,6 +168,25 @@ export default function SessionPage() {
       .catch(() => router.push("/"));
   }, [params.id, router]);
 
+  useEffect(() => {
+    const id = Number(params.id);
+    if (!id || !session || session.notes) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const data = await getSession(id);
+        if (data.notes) {
+          setSession(data);
+          clearInterval(interval);
+        }
+      } catch (err) {
+        console.error("Error polling session notes:", err);
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [params.id, session]);
+
   const closeNotes = useCallback(() => setNotesOpen(false), []);
 
   const handleNotesUpdated = useCallback((notes: string) => {

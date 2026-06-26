@@ -1,15 +1,46 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 import aiosqlite
-from database import get_db
+from database import get_db, DB_PATH
 from services.llm import extract_images, synthesize_notes
 import traceback
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
+async def process_session_background(session_id: int, image_bytes: list[bytes]):
+    try:
+        extracted = await extract_images(image_bytes)
+        notes = await synthesize_notes(extracted)
+
+        # Try to find a good title from the notes
+        title = "Untitled Session"
+        for line in notes.split("\n"):
+            clean = line.strip().lstrip("#").strip()
+            if clean and len(clean) > 3:
+                title = clean[:100]
+                break
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                "UPDATE sessions SET title = ?, notes = ? WHERE id = ?",
+                (title, notes, session_id),
+            )
+            await db.commit()
+    except Exception as e:
+        traceback.print_exc()
+        error_msg = f"ERROR: Failed to process study material. {str(e)}"
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute(
+                "UPDATE sessions SET notes = ? WHERE id = ?",
+                (error_msg, session_id),
+            )
+            await db.commit()
+
+
 @router.post("")
 async def create_session(
+    background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     db: aiosqlite.Connection = Depends(get_db),
 ):
@@ -19,42 +50,23 @@ async def create_session(
         content = await f.read()
         image_bytes.append(content)
 
-    try:
-        extracted = await extract_images(image_bytes)
-    except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=502,
-            content={"detail": f"Image extraction failed: {e}"},
-        )
-
-    try:
-        notes = await synthesize_notes(extracted)
-    except Exception as e:
-        traceback.print_exc()
-        return JSONResponse(
-            status_code=502,
-            content={"detail": f"Note synthesis failed: {e}"},
-        )
-
     title = files[0].filename.split(".")[0] if files else "Untitled Session"
-    for line in notes.split("\n"):
-        clean = line.strip().lstrip("#").strip()
-        if clean and len(clean) > 3:
-            title = clean[:100]
-            break
 
+    # Insert immediate session with null notes
     cursor = await db.execute(
-        "INSERT INTO sessions (title, notes) VALUES (?, ?)",
-        (title, notes),
+        "INSERT INTO sessions (title, notes) VALUES (?, NULL)",
+        (title,),
     )
     await db.commit()
     session_id = cursor.lastrowid
 
+    # Queue background task
+    background_tasks.add_task(process_session_background, session_id, image_bytes)
+
     return {
         "id": session_id,
         "title": title,
-        "notes": notes,
+        "notes": None,
     }
 
 
