@@ -8,13 +8,27 @@ import asyncio
 OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY", "")
 OPENCODE_BASE_URL = "https://opencode.ai/zen/go/v1"
 MODEL = "mimo-v2.5"
+FALLBACK_MODEL = "deepseek-v4-flash"
 
 # ponytail: single client, connection pool reused across all requests
 _http_client = httpx.AsyncClient(timeout=120)
 
 
 async def chat_completion(messages: list[dict], stream: bool = False) -> dict:
-    for attempt in range(4):
+    resp = await _http_client.post(
+        f"{OPENCODE_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {OPENCODE_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": MODEL,
+            "messages": messages,
+            "stream": stream,
+        },
+    )
+    if resp.status_code == 429:
+        print(f"API 429 on {MODEL}, falling back to {FALLBACK_MODEL}")
         resp = await _http_client.post(
             f"{OPENCODE_BASE_URL}/chat/completions",
             headers={
@@ -22,21 +36,14 @@ async def chat_completion(messages: list[dict], stream: bool = False) -> dict:
                 "Content-Type": "application/json",
             },
             json={
-                "model": MODEL,
+                "model": FALLBACK_MODEL,
                 "messages": messages,
                 "stream": stream,
             },
         )
-        if resp.status_code == 429:
-            wait = 2 ** attempt  # 1s, 2s, 4s, 8s
-            print(f"API 429 rate limited, retrying in {wait}s (attempt {attempt+1}/4)")
-            await asyncio.sleep(wait)
-            continue
-        if resp.status_code != 200:
-            print(f"API ERROR {resp.status_code}: {resp.text[:500]}")
-        resp.raise_for_status()
-        return resp.json()
-    resp.raise_for_status()  # final raise after retries exhausted
+    if resp.status_code != 200:
+        print(f"API ERROR {resp.status_code}: {resp.text[:500]}")
+    resp.raise_for_status()
     return resp.json()
 
 
