@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import { sendMessage, appendImages } from "@/lib/api";
 import { Persona } from "@/components/ai-elements/persona";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
+import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
 import { Plus, Send, Paperclip, Image as ImageIcon, X, Loader2 } from "lucide-react";
 
 interface ChatPanelProps {
@@ -13,6 +14,7 @@ interface ChatPanelProps {
   initialMessages: { role: string; content: string }[];
   onVoiceMode?: () => void;
   onNotesUpdated?: (notes: string | null) => void;
+  onNoteChange?: () => void;
 }
 
 interface ImageAttachment {
@@ -20,7 +22,7 @@ interface ImageAttachment {
   preview: string;
 }
 
-export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpdated }: ChatPanelProps) {
+export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpdated, onNoteChange }: ChatPanelProps) {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,6 +31,8 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollOpacity, setScrollOpacity] = useState(0);
   const recognitionRef = useRef<any>(null);
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLongPressRef = useRef(false);
@@ -37,6 +41,13 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop } = scrollRef.current;
+    const maxScroll = 80;
+    setScrollOpacity(Math.min(1, scrollTop / maxScroll));
+  }, []);
 
   // Cleanup previews on unmount
   useEffect(() => {
@@ -79,22 +90,20 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
     if (!msg && !hasImages) return;
     if (loading) return;
 
-    // If there are images, fire off the notes update in parallel
+    // If there are images, upload them for persistent context
     if (hasImages) {
       const imagesToUpload = attachments.map((a) => a.file);
       setUploading(true);
       clearAttachments();
 
-      // Fire and forget — runs in background, updates notes when done
+      // Fire and forget — extracts text and stores permanently
       appendImages(sessionId, imagesToUpload)
-        .then((updatedNotes) => {
-          onNotesUpdated?.(updatedNotes);
-          // Add a system-like message to chat
+        .then(() => {
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: `📸 **${imagesToUpload.length} image${imagesToUpload.length > 1 ? "s" : ""} uploaded** — processing and updating study notes in the background...`,
+              content: `📸 **${imagesToUpload.length} image${imagesToUpload.length > 1 ? "s" : ""} uploaded** — I've read and remembered the content. Ask me anything about it!`,
             },
           ]);
         })
@@ -114,8 +123,11 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
       setLoading(true);
 
       try {
-        const response = await sendMessage(sessionId, msg);
-        setMessages((prev) => [...prev, { role: "assistant", content: response }]);
+        const data = await sendMessage(sessionId, msg);
+        setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
+        if (data.note_changes?.length) {
+          onNoteChange?.();
+        }
       } catch {
         setMessages((prev) => [
           ...prev,
@@ -198,40 +210,45 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
   return (
     <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-        {messages.length === 0 && (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-base">
-            Ask anything about your study material
-          </div>
-        )}
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[75%] rounded-2xl px-5 py-3 text-[15px] leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-foreground text-background"
-                  : "bg-muted"
-              }`}
-            >
-              {msg.role === "assistant" ? (
-                <div className="chat-markdown">
-                  <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
-                </div>
-              ) : (
-                msg.content
-              )}
+      <div className="relative flex-1 overflow-hidden">
+        <div ref={scrollRef} onScroll={handleScroll} className="absolute inset-0 overflow-y-auto p-4 md:p-6 space-y-4">
+          {messages.length === 0 && (
+            <div className="flex items-center justify-center h-full text-muted-foreground text-base">
+              Ask anything about your study material
             </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="flex justify-start py-2">
-            <ThinkingIndicator />
-          </div>
-        )}
-        <div ref={bottomRef} />
+          )}
+          {messages.map((msg, i) => (
+            <div
+              key={i}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-[75%] rounded-2xl px-5 py-3 text-[15px] leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-foreground text-background"
+                    : "bg-muted"
+                }`}
+              >
+                {msg.role === "assistant" ? (
+                  <div className="chat-markdown">
+                    <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
+                  </div>
+                ) : (
+                  msg.content
+                )}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex justify-start py-2">
+              <ThinkingIndicator />
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+        <div style={{ opacity: scrollOpacity }} className="pointer-events-none transition-opacity duration-150">
+          <ProgressiveBlur position="top" backgroundColor="#f0f0f0" />
+        </div>
       </div>
 
       {/* Input area */}
@@ -244,7 +261,7 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
                 <img
                   src={att.preview}
                   alt={att.file.name}
-                  className="w-16 h-16 md:w-20 md:h-20 rounded-xl object-cover border border-border/50"
+                  className="w-16 h-16 md:w-20 md:h-20 rounded-xl object-contain bg-muted border border-border/50"
                 />
                 <button
                   onClick={() => removeAttachment(i)}

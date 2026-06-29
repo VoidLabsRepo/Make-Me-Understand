@@ -5,8 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { getSession, type Session } from "@/lib/api";
 import { ChatPanel } from "@/components/chat-panel";
-import { NotesSidebar } from "@/components/notes-sidebar";
+import { NotesPanel } from "@/components/notes-panel";
 import { VoiceMode } from "@/components/voice-mode";
+import { MatrixLoader } from "@/components/matrix-loader";
 import { SidebarToggleIcon } from "@/components/unlumen-ui/sidebar-toggle-icon";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -86,36 +87,36 @@ const contentVariants = {
   },
 };
 
-function NotesPanel({ notes, delay = 0, isMobile = false, onClose }: { notes: string | null; delay?: number; isMobile?: boolean; onClose?: () => void }) {
-  if (isMobile) {
-    return (
-      <>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="fixed inset-0 bg-black/30 z-40"
-        />
-        <motion.aside
-          variants={mobilePanelVariants}
-          initial="hidden"
-          animate="visible"
-          exit="exit"
-          className="fixed inset-x-0 bottom-0 top-12 bg-white rounded-t-2xl border-t overflow-hidden flex flex-col z-50"
-        >
-          <div className="px-5 py-4 border-b flex items-center justify-between">
-            <h2 className="text-base font-medium text-muted-foreground">Notes</h2>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-              <SidebarToggleIcon isOpen={true} className="size-5" />
-            </button>
-          </div>
-          <NotesSidebar notes={notes} />
-        </motion.aside>
-      </>
-    );
-  }
+function MobileNotesPanel({ sessionId, refreshTrigger, onClose }: { sessionId: number; refreshTrigger?: number; onClose: () => void }) {
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 bg-black/30 z-40"
+      />
+      <motion.aside
+        variants={mobilePanelVariants}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+        className="fixed inset-x-0 bottom-0 top-12 bg-white rounded-t-2xl border-t overflow-hidden flex flex-col z-50"
+      >
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <h2 className="text-base font-medium text-muted-foreground">Notes</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <SidebarToggleIcon isOpen={true} className="size-5" />
+          </button>
+        </div>
+        <NotesPanel sessionId={sessionId} refreshTrigger={refreshTrigger} />
+      </motion.aside>
+    </>
+  );
+}
 
+function DesktopNotesPanel({ sessionId, refreshTrigger, delay = 0 }: { sessionId: number; refreshTrigger?: number; delay?: number }) {
   return (
     <motion.aside
       variants={panelVariants}
@@ -135,7 +136,7 @@ function NotesPanel({ notes, delay = 0, isMobile = false, onClose }: { notes: st
         <div className="px-5 py-4 border-b">
           <h2 className="text-base font-medium text-muted-foreground">Notes</h2>
         </div>
-        <NotesSidebar notes={notes} />
+        <NotesPanel sessionId={sessionId} refreshTrigger={refreshTrigger} />
       </motion.div>
     </motion.aside>
   );
@@ -158,6 +159,7 @@ export default function SessionPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
   const [notesOpen, setNotesOpen] = useState(true);
+  const [notesRefresh, setNotesRefresh] = useState(0);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -168,26 +170,11 @@ export default function SessionPage() {
       .catch(() => router.push("/"));
   }, [params.id, router]);
 
-  useEffect(() => {
-    const id = Number(params.id);
-    if (!id || !session || session.notes !== null) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const data = await getSession(id);
-        if (data.notes !== null) {
-          setSession(data);
-          clearInterval(interval);
-        }
-      } catch (err) {
-        console.error("Error polling session notes:", err);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [params.id, session]);
-
   const closeNotes = useCallback(() => setNotesOpen(false), []);
+
+  const handleNoteChange = useCallback(() => {
+    setNotesRefresh((n) => n + 1);
+  }, []);
 
   const handleNotesUpdated = useCallback((notes: string | null) => {
     setSession((prev) => prev ? { ...prev, notes } : prev);
@@ -195,8 +182,8 @@ export default function SessionPage() {
 
   if (!session) {
     return (
-      <div className="h-dvh flex items-center justify-center text-muted-foreground">
-        Loading...
+      <div className="h-dvh flex items-center justify-center">
+        <MatrixLoader />
       </div>
     );
   }
@@ -218,10 +205,10 @@ export default function SessionPage() {
         </header>
         <div className="flex-1 flex gap-3 md:gap-5 overflow-hidden px-3 md:px-5 pb-3 md:pb-5">
           <div className="flex-1 min-w-0">
-            <VoiceMode sessionId={session.id} notes={session.notes || ""} onClose={() => setVoiceMode(false)} />
+            <VoiceMode sessionId={session.id} notes={session.notes || ""} onClose={() => setVoiceMode(false)} onNoteChange={handleNoteChange} />
           </div>
           <AnimatePresence mode="popLayout">
-            {notesOpen && <NotesPanel notes={session.notes} isMobile={isMobile} onClose={closeNotes} />}
+            {notesOpen && <MobileNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} onClose={closeNotes} />}
           </AnimatePresence>
         </div>
       </div>
@@ -256,13 +243,18 @@ export default function SessionPage() {
             initialMessages={session.messages || []}
             onVoiceMode={() => setVoiceMode(true)}
             onNotesUpdated={handleNotesUpdated}
+            onNoteChange={handleNoteChange}
           />
         </motion.div>
 
         {/* Notes panel */}
         <AnimatePresence mode="popLayout">
           {notesOpen && (
-            <NotesPanel notes={session.notes} isMobile={isMobile} onClose={closeNotes} />
+            isMobile ? (
+              <MobileNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} onClose={closeNotes} />
+            ) : (
+              <DesktopNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} />
+            )
           )}
         </AnimatePresence>
       </div>

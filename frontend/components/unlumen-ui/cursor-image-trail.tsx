@@ -40,6 +40,7 @@ export function CursorImageTrail({
   const lastPos = React.useRef<{ x: number; y: number } | null>(null);
   const itemCounter = React.useRef(0);
   const containerElRef = React.useRef<HTMLDivElement>(null);
+  const lastMoveTime = React.useRef(0);
 
   const itemsRef = React.useRef(items);
   itemsRef.current = items;
@@ -50,6 +51,11 @@ export function CursorImageTrail({
     const onLeave = () => setTrail([]);
 
     const onMove = (e: Event) => {
+      // ponytail: throttle to ~20fps to avoid reconciliation overhead
+      const now = Date.now();
+      if (now - lastMoveTime.current < 50) return;
+      lastMoveTime.current = now;
+
       const mouseEvent = e as MouseEvent;
       const rect =
         containerRef?.current?.getBoundingClientRect() ??

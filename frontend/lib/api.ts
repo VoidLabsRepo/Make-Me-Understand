@@ -4,6 +4,7 @@ export interface Session {
   id: number;
   title: string;
   notes: string | null;
+  image_context: string;
   created_at: string;
   messages: { role: string; content: string }[];
 }
@@ -15,24 +16,12 @@ export interface SessionListItem {
 }
 
 export async function createSession(
-  files: File[],
-  onStep?: (step: "uploading" | "extracting" | "synthesizing") => void,
-  signal?: AbortSignal,
+  title?: string,
 ): Promise<Session> {
-  const form = new FormData();
-  if (files.length === 0) {
-    // Append dummy field to ensure browser constructs a valid multipart/form-data payload
-    form.append("empty", "true");
-  } else {
-    for (const file of files) {
-      form.append("files", file);
-    }
-  }
-  onStep?.("uploading");
   const res = await fetch(`${API_BASE}/api/sessions`, {
     method: "POST",
-    body: form,
-    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title || "New Session" }),
   });
   if (!res.ok) throw new Error("Failed to create session");
   return res.json();
@@ -50,15 +39,14 @@ export async function getSession(id: number): Promise<Session> {
   return res.json();
 }
 
-export async function sendMessage(sessionId: number, message: string): Promise<string> {
+export async function sendMessage(sessionId: number, message: string): Promise<{ response: string; note_changes: NoteChange[] }> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
   });
   if (!res.ok) throw new Error("Failed to send message");
-  const data = await res.json();
-  return data.response;
+  return res.json();
 }
 
 export interface WordTiming {
@@ -70,6 +58,7 @@ export interface WordTiming {
 export interface VoiceResponse {
   response: string;
   word_timings: WordTiming[];
+  note_changes: NoteChange[];
 }
 
 export async function sendVoiceMessage(sessionId: number, message: string): Promise<VoiceResponse> {
@@ -120,5 +109,143 @@ export async function deleteSession(id: number): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete session");
+}
+
+export interface DeletedSession {
+  original_id: number;
+  title: string;
+  created_at: string;
+  deleted_at: string;
+  expires_at: string;
+}
+
+export async function listDeletedSessions(): Promise<DeletedSession[]> {
+  const res = await fetch(`${API_BASE}/api/sessions/deleted`);
+  if (!res.ok) throw new Error("Failed to list deleted sessions");
+  return res.json();
+}
+
+export async function restoreSession(originalId: number): Promise<{ id: number; title: string }> {
+  const res = await fetch(`${API_BASE}/api/sessions/restore/${originalId}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to restore session");
+  return res.json();
+}
+
+export interface Note {
+  id: number;
+  session_id: number;
+  title: string;
+  content: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NoteChange {
+  action: "created" | "updated" | "deleted";
+  note_id: number;
+  title?: string;
+}
+
+export async function listNotes(sessionId: number): Promise<Note[]> {
+  const res = await fetch(`${API_BASE}/api/notes/session/${sessionId}`);
+  if (!res.ok) throw new Error("Failed to list notes");
+  return res.json();
+}
+
+export async function createNote(sessionId: number, title: string, content: string): Promise<Note> {
+  const res = await fetch(`${API_BASE}/api/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, title, content }),
+  });
+  if (!res.ok) throw new Error("Failed to create note");
+  return res.json();
+}
+
+export async function updateNote(noteId: number, data: { title?: string; content?: string }): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/notes/${noteId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update note");
+}
+
+export async function deleteNote(noteId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/notes/${noteId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete note");
+}
+
+// Study Spaces
+
+export interface StudySpace {
+  id: number;
+  name: string;
+  emoji: string;
+  created_at: string;
+  session_count: number;
+  sessions: { id: number; title: string }[];
+}
+
+export interface StudySpaceDetail extends StudySpace {
+  sessions: { id: number; title: string; created_at: string }[];
+}
+
+export async function listStudySpaces(): Promise<StudySpace[]> {
+  const res = await fetch(`${API_BASE}/api/study-spaces`);
+  if (!res.ok) throw new Error("Failed to list study spaces");
+  return res.json();
+}
+
+export async function getStudySpace(id: number): Promise<StudySpaceDetail> {
+  const res = await fetch(`${API_BASE}/api/study-spaces/${id}`);
+  if (!res.ok) throw new Error("Failed to get study space");
+  return res.json();
+}
+
+export async function createStudySpace(name: string, emoji: string = ""): Promise<StudySpace> {
+  const res = await fetch(`${API_BASE}/api/study-spaces`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, emoji }),
+  });
+  if (!res.ok) throw new Error("Failed to create study space");
+  return res.json();
+}
+
+export async function renameStudySpace(id: number, name: string, emoji: string = ""): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/study-spaces/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, emoji }),
+  });
+  if (!res.ok) throw new Error("Failed to rename study space");
+}
+
+export async function deleteStudySpace(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/study-spaces/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete study space");
+}
+
+export async function addSessionToSpace(spaceId: number, sessionId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/study-spaces/${spaceId}/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  if (!res.ok) throw new Error("Failed to add session to space");
+}
+
+export async function removeSessionFromSpace(spaceId: number, sessionId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/study-spaces/${spaceId}/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to remove session from space");
 }
 
