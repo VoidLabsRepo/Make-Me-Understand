@@ -9,3 +9,4 @@ data/
 *.pyc
 .DS_Store
 backend/cache/
+logs/

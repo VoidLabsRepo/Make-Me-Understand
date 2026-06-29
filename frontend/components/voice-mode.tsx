@@ -276,7 +276,7 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
 
   return (
     <div className="flex flex-col h-full w-full relative">
-      <div className="absolute top-3 left-3 z-10">
+      <div className={`absolute top-3 z-10 ${isDesktop ? "left-1/2 -translate-x-1/2" : "left-3"}`}>
         <motion.button
           onClick={(e) => { e.stopPropagation(); stopAll(); onClose(); }}
           whileTap={{ scale: 0.9 }}
