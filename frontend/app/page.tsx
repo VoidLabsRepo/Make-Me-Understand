@@ -4,21 +4,11 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { UploadDialog } from "@/components/upload-dialog";
 import { listSessions, renameSession, deleteSession, type SessionListItem } from "@/lib/api";
-import { BookOpen, MoreHorizontal, Pencil, Trash2, Check, X, Brain, Lightbulb, GraduationCap, FlaskConical, Sparkles, Atom, Palette } from "lucide-react";
+import { BookOpen, MoreHorizontal, Pencil, Trash2, Check, X, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CursorImageTrail } from "@/components/unlumen-ui/cursor-image-trail";
-
-const TRAIL_ITEMS = [
-  <div key="b"><BookOpen className="text-neutral-800" size={40} /></div>,
-  <div key="br"><Brain className="text-stone-700" size={40} /></div>,
-  <div key="l"><Lightbulb className="text-zinc-800" size={40} /></div>,
-  <div key="g"><GraduationCap className="text-neutral-900" size={40} /></div>,
-  <div key="f"><FlaskConical className="text-slate-800" size={40} /></div>,
-  <div key="s"><Sparkles className="text-stone-800" size={40} /></div>,
-  <div key="a"><Atom className="text-zinc-900" size={40} /></div>,
-  <div key="p"><Palette className="text-neutral-700" size={40} /></div>,
-];
+import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
+import { StudySpaces } from "@/components/study-spaces";
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -26,6 +16,9 @@ export default function Dashboard() {
   const [editValue, setEditValue] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const [showCreateSpace, setShowCreateSpace] = useState(false);
+  const [bottomBlurOpacity, setBottomBlurOpacity] = useState(1);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -89,40 +82,55 @@ export default function Dashboard() {
   };
 
   const handleDelete = async (id: number) => {
-    await deleteSession(id);
-    setSessions((prev) => prev.filter((s) => s.id !== id));
-    setDeletingId(null);
+    try {
+      await deleteSession(id);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    } catch {
+      // ignore
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
     <div className="h-dvh bg-[#f0f0f0] flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-16">
-          <div className="flex flex-col items-center text-center mb-16">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
-                <BookOpen className="text-background" size={20} />
+      <div className="relative flex-1 overflow-hidden">
+        <div
+          ref={scrollRef}
+          onScroll={() => {
+            if (!scrollRef.current) return;
+            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+            const atBottom = scrollHeight - scrollTop - clientHeight < 10;
+            setBottomBlurOpacity(atBottom ? 0 : 1);
+          }}
+          className="absolute inset-0 overflow-y-auto"
+          style={{ overflowX: "visible" }}
+        >
+          <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-16" style={{ overflow: "visible" }}>
+            <div className="flex flex-col items-center text-center mb-16 relative z-10">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
+                  <BookOpen className="text-background" size={20} />
+                </div>
+                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Make Me Understand</h1>
               </div>
-              <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Make Me Understand</h1>
+              <p className="text-muted-foreground text-base md:text-lg max-w-md mb-8">
+                Upload your study materials. AI will synthesize notes, explain concepts, and help you truly understand.
+              </p>
+              <UploadDialog />
             </div>
-            <p className="text-muted-foreground text-base md:text-lg max-w-md mb-8">
-              Upload your study materials. AI will synthesize notes, explain concepts, and help you truly understand.
-            </p>
-            <UploadDialog />
-          </div>
 
-          {sessions.length > 0 && (
-            <div>
-              <h2 className="text-sm font-medium text-muted-foreground mb-4">Recent Sessions</h2>
-              <CursorImageTrail
-                items={TRAIL_ITEMS}
-                itemSize={100}
-                trailLength={8}
-                spawnDistance={40}
-                rotationRange={25}
-                className="rounded-3xl"
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-medium text-muted-foreground">Recent Sessions</h2>
+              <button
+                onClick={() => setShowCreateSpace(true)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                title="Create study space"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <FolderOpen size={18} />
+              </button>
+            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {sessions.map((s) => (
                   <div
                     key={s.id}
@@ -233,10 +241,13 @@ export default function Dashboard() {
                     )}
                   </div>
                 ))}
-                </div>
-              </CursorImageTrail>
-            </div>
-          )}
+                <StudySpaces showCreate={showCreateSpace} onCreateVisible={() => setShowCreateSpace(false)} />
+              </div>
+          </div>
+        </div>
+        <ProgressiveBlur position="top" backgroundColor="#f0f0f0" />
+        <div style={{ opacity: bottomBlurOpacity, transition: "opacity 0.2s" }}>
+          <ProgressiveBlur position="bottom" backgroundColor="#f0f0f0" />
         </div>
       </div>
     </div>
