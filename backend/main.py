@@ -9,6 +9,7 @@ from routes.sessions import router as sessions_router, cleanup_expired_backups
 from routes.notes import router as notes_router
 from routes.chat import router as chat_router
 from routes.study_spaces import router as study_spaces_router
+from routes.settings import router as settings_router
 
 
 @asynccontextmanager
@@ -20,6 +21,7 @@ async def lifespan(app: FastAPI):
 
 fastapi_app = FastAPI(title="Make Me Understand", lifespan=lifespan)
 
+fastapi_app.include_router(settings_router)
 fastapi_app.include_router(sessions_router)
 fastapi_app.include_router(notes_router)
 fastapi_app.include_router(chat_router)

@@ -1,50 +1,75 @@
-import httpx
 import os
 import base64
 import json
 import re
 import asyncio
+from litellm import acompletion
 
-OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY", "")
-OPENCODE_BASE_URL = "https://opencode.ai/zen/go/v1"
-MODEL = "mimo-v2.5"
-FALLBACK_MODEL = "deepseek-v4-flash"
-
-# ponytail: single client, connection pool reused across all requests
-_http_client = httpx.AsyncClient(timeout=120)
+# ponytail: default config from env, overridden by settings DB
+_default_config: dict | None = None
 
 
-async def chat_completion(messages: list[dict], stream: bool = False) -> dict:
-    resp = await _http_client.post(
-        f"{OPENCODE_BASE_URL}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENCODE_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": MODEL,
-            "messages": messages,
-            "stream": stream,
-        },
-    )
-    if resp.status_code == 429:
-        print(f"API 429 on {MODEL}, falling back to {FALLBACK_MODEL}")
-        resp = await _http_client.post(
-            f"{OPENCODE_BASE_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENCODE_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": FALLBACK_MODEL,
-                "messages": messages,
-                "stream": stream,
-            },
-        )
-    if resp.status_code != 200:
-        print(f"API ERROR {resp.status_code}: {resp.text[:500]}")
-    resp.raise_for_status()
-    return resp.json()
+def get_llm_config_sync() -> dict:
+    """Get LLM config, reading from cache or env defaults."""
+    global _default_config
+    if _default_config is not None:
+        return _default_config
+    api_key = os.getenv("OPENCODE_API_KEY", "")
+    _default_config = {
+        "provider": "opencode_go",
+        "model": "mimo-v2.5",
+        "api_key": api_key,
+        "api_base": "https://opencode.ai/zen/go/v1",
+    }
+    return _default_config
+
+
+async def get_llm_config() -> dict:
+    """Async wrapper — reads from DB on first call, caches in memory."""
+    global _default_config
+    if _default_config is not None:
+        return _default_config
+    try:
+        from database import get_setting
+        raw = await get_setting("llm_provider")
+        if raw:
+            _default_config = json.loads(raw)
+            return _default_config
+    except Exception:
+        pass
+    return get_llm_config_sync()
+
+
+def invalidate_llm_config():
+    """Clear cached config so next request re-reads from DB."""
+    global _default_config
+    _default_config = None
+
+
+async def chat_completion(
+    messages: list[dict],
+    stream: bool = False,
+    model: str | None = None,
+    api_key: str | None = None,
+    api_base: str | None = None,
+) -> dict:
+    config = await get_llm_config()
+    model = model or config.get("model", "mimo-v2.5")
+    api_key = api_key or config.get("api_key", "")
+    api_base = api_base or config.get("api_base")
+
+    kwargs = {"model": model, "messages": messages, "stream": stream}
+    if api_key:
+        kwargs["api_key"] = api_key
+    if api_base:
+        kwargs["api_base"] = api_base
+
+    response = await acompletion(**kwargs)
+    if hasattr(response, "model_dump"):
+        return response.model_dump()
+    if hasattr(response, "dict"):
+        return response.dict()
+    return response
 
 
 async def generate_title(messages: list[dict]) -> str:
