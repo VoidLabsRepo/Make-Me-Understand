@@ -2,8 +2,6 @@
 
 Upload your study materials, and let AI turn them into easy-to-understand notes — then chat with them or listen to voice explanations.
 
-> Built by **VoidLabs** — Founded by Avinash Anusuri & Gowrish Jamili
-
 ## What it does
 
 1. **Chat** — ask questions about your material and get instant answers
