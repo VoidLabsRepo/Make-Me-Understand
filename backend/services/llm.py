@@ -37,8 +37,15 @@ async def generate_title(messages: list[dict]) -> str:
         {
             "role": "system",
             "content": (
-                "Generate a short, descriptive title (max 8 words) for this conversation. "
-                "Reply with ONLY the title, no quotes, no punctuation at the end."
+                "Generate a short, descriptive title for this conversation. "
+                "Rules:\n"
+                "- If the conversation is about a specific subject and unit/chapter, include it. "
+                "Examples: 'Managerial Economics — Unit 1', 'Demand & Supply Functions', 'Organic Chemistry — Alkanes'\n"
+                "- If it's a casual chat about a topic, name it after the topic. "
+                "Examples: 'Python List Comprehensions', 'World War II Causes', 'How Photosynthesis Works'\n"
+                "- If it's a mix of topics, pick the most discussed one.\n"
+                "- Keep it under 8 words.\n"
+                "- Reply with ONLY the title, no quotes, no extra punctuation."
             ),
         },
         *messages,
