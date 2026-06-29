@@ -2,12 +2,41 @@
 
 Upload your study materials, and let AI turn them into easy-to-understand notes — then chat with them or listen to voice explanations.
 
+> Built by **VoidLabs** — Founded by Avinash Anusuri & Gowrish Jamili
+
 ## What it does
 
-1. **Upload** — snap photos of your notes, textbooks, or whiteboards
-2. **AI Notes** — the app extracts all text and synthesizes structured study notes
-3. **Chat** — ask questions about your material and get instant answers
-4. **Voice** — tap the Halo button and speak naturally to get spoken explanations
+1. **Chat** — ask questions about your material and get instant answers
+2. **Voice** — tap the Halo button and speak naturally to get spoken explanations
+3. **Upload** — snap photos of your notes anytime during a conversation
+4. **Study Spaces** — organize sessions into folders
+5. **AI Notes** — the AI creates formatted notes when you ask it to
+
+## Features
+
+### AI Tutor — Void X1
+- Structured teaching: Direct Answer → Breakdown → Example → Check-in
+- Real-world analogies and step-by-step explanations
+- Notes formatted with markdown (headers, bullets, bold)
+- Auto-generates session titles after 5 messages
+
+### Voice Mode
+- Natural spoken explanations (Kokoro TTS)
+- Word-level subtitle sync
+- Push-to-talk (hold button or spacebar)
+- Voice responses with numbered points and examples
+
+### Study Spaces
+- Create folders to organize sessions
+- 3D folder with pop-out files on hover
+- Right-click/long-press to rename or delete
+- Sessions in spaces hidden from dashboard
+
+### Image Support
+- Upload images anytime during chat
+- AI sees actual images (multimodal, not text extraction)
+- Images compressed and stored permanently
+- Persistent across all conversations
 
 ## Screenshots
 
@@ -20,28 +49,25 @@ Upload your study materials, and let AI turn them into easy-to-understand notes 
 ### Voice Mode
 ![Voice Mode](screenshots/voice-mode.png)
 
-## Languages & Technologies
+## Tech Stack
 
-- **TypeScript** — frontend (Next.js + React)
-- **Python** — backend (FastAPI + SQLite)
-- **Tailwind CSS** — styling
-- **Kokoro TTS** — text-to-speech (Af-Heart voice)
-- **Rive** — animations (Halo character)
+- **Frontend** — Next.js, React, TypeScript, Tailwind CSS
+- **Backend** — FastAPI, Python, SQLite (aiosqlite)
+- **TTS** — Kokoro-82M (Af-Heart voice)
+- **Animations** — Framer Motion, Rive
+- **AI** — OpenCode Go (MiMo-V2.5)
 
 ## Getting Started
 
 ### With Docker (recommended)
 
 ```bash
-# Clone the repo
 git clone https://github.com/VoidLabsRepo/Make-Me-Understand.git
 cd Make-Me-Understand
 
-# Add your API key
 cp .env.example .env
 # Edit .env and add your OpenCode API key
 
-# Start everything
 docker compose up --build
 ```
 
