@@ -3,6 +3,7 @@ import os
 import base64
 import json
 import re
+import asyncio
 
 OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY", "")
 OPENCODE_BASE_URL = "https://opencode.ai/zen/go/v1"
@@ -13,21 +14,29 @@ _http_client = httpx.AsyncClient(timeout=120)
 
 
 async def chat_completion(messages: list[dict], stream: bool = False) -> dict:
-    resp = await _http_client.post(
-        f"{OPENCODE_BASE_URL}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENCODE_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": MODEL,
-            "messages": messages,
-            "stream": stream,
-        },
-    )
-    if resp.status_code != 200:
-        print(f"API ERROR {resp.status_code}: {resp.text[:500]}")
-    resp.raise_for_status()
+    for attempt in range(4):
+        resp = await _http_client.post(
+            f"{OPENCODE_BASE_URL}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENCODE_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": MODEL,
+                "messages": messages,
+                "stream": stream,
+            },
+        )
+        if resp.status_code == 429:
+            wait = 2 ** attempt  # 1s, 2s, 4s, 8s
+            print(f"API 429 rate limited, retrying in {wait}s (attempt {attempt+1}/4)")
+            await asyncio.sleep(wait)
+            continue
+        if resp.status_code != 200:
+            print(f"API ERROR {resp.status_code}: {resp.text[:500]}")
+        resp.raise_for_status()
+        return resp.json()
+    resp.raise_for_status()  # final raise after retries exhausted
     return resp.json()
 
 
