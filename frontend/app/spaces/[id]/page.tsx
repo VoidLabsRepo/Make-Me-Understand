@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
 import { ArrowLeft, Plus, Loader2, Trash2 } from "lucide-react";
 import {
   getStudySpace,
@@ -12,6 +13,19 @@ import {
   type StudySpaceDetail,
   type SessionListItem,
 } from "@/lib/api";
+
+// ponytail: bouncy spring
+const bounce = { type: "spring" as const, stiffness: 400, damping: 17 }
+
+const stagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06 } },
+}
+
+const cardPop = {
+  hidden: { opacity: 0, y: 20, scale: 0.95 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: bounce },
+}
 
 export default function SpaceDetailPage() {
   const params = useParams();
@@ -101,48 +115,76 @@ export default function SpaceDetailPage() {
                 {space.session_count} session{space.session_count !== 1 ? "s" : ""}
               </span>
               <div className="flex-1" />
-              <button
+              <motion.button
                 onClick={() => setShowAdd(!showAdd)}
+                whileTap={{ scale: 0.95 }}
+                transition={bounce}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-foreground text-background text-sm font-medium"
               >
                 <Plus size={14} />
                 Add Sessions
-              </button>
+              </motion.button>
             </div>
 
             {/* Add sessions panel */}
-            {showAdd && availableSessions.length > 0 && (
-              <div className="mb-6 p-4 rounded-2xl border border-border bg-white space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Add sessions to this space</p>
-                <div className="space-y-1 max-h-48 overflow-y-auto">
-                  {availableSessions.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => handleAdd(s.id)}
-                      className="w-full text-left flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted text-sm transition-colors"
-                    >
-                      <span className="truncate">
-                        {s.title.replace(/\*\*/g, "").replace(/^Q\d*:\s*/, "")}
-                      </span>
-                      <Plus size={14} className="text-muted-foreground shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <AnimatePresence>
+              {showAdd && availableSessions.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                  transition={bounce}
+                  className="mb-6 p-4 rounded-2xl border border-border bg-white space-y-2"
+                >
+                  <p className="text-sm font-medium text-muted-foreground">Add sessions to this space</p>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {availableSessions.map((s) => (
+                      <motion.button
+                        key={s.id}
+                        onClick={() => handleAdd(s.id)}
+                        whileTap={{ scale: 0.97 }}
+                        transition={bounce}
+                        className="w-full text-left flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted text-sm"
+                      >
+                        <span className="truncate">
+                          {s.title.replace(/\*\*/g, "").replace(/^Q\d*:\s*/, "")}
+                        </span>
+                        <Plus size={14} className="text-muted-foreground shrink-0" />
+                      </motion.button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Sessions */}
             {space.sessions.length === 0 ? (
               <div className="text-center py-16 text-muted-foreground text-sm">
                 <p>No sessions in this space yet.</p>
-                <button onClick={() => setShowAdd(true)} className="mt-2 underline text-xs">
+                <motion.button
+                  onClick={() => setShowAdd(true)}
+                  whileTap={{ scale: 0.95 }}
+                  transition={bounce}
+                  className="mt-2 underline text-xs"
+                >
                   Add some sessions
-                </button>
+                </motion.button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <motion.div
+                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+                variants={stagger}
+                initial="hidden"
+                animate="visible"
+              >
                 {space.sessions.map((s) => (
-                  <div key={s.id} className="group relative flex flex-col rounded-3xl border border-border bg-surface h-64 transition-colors hover:border-border/80 select-none">
+                  <motion.div
+                    key={s.id}
+                    variants={cardPop}
+                    whileTap={{ scale: 0.98 }}
+                    transition={bounce}
+                    className="group relative flex flex-col rounded-3xl border border-border bg-surface h-64 select-none"
+                  >
                     <div className="flex flex-col gap-3 px-5 pt-6 pb-4 flex-1">
                       <Link
                         href={`/session/${s.id}`}
@@ -158,16 +200,18 @@ export default function SpaceDetailPage() {
                         })}
                       </span>
                     </div>
-                    <button
+                    <motion.button
                       onClick={() => handleRemove(s.id)}
+                      whileTap={{ scale: 0.85 }}
+                      transition={bounce}
                       className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
                       title="Remove from space"
                     >
                       <Trash2 size={12} />
-                    </button>
-                  </div>
+                    </motion.button>
+                  </motion.div>
                 ))}
-              </div>
+              </motion.div>
             )}
           </div>
         </div>

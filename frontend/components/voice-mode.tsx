@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { motion } from "motion/react";
 import { Persona } from "@/components/ai-elements/persona";
 import type { PersonaState } from "@/components/ai-elements/persona";
 import { sendVoiceMessage } from "@/lib/api";
@@ -276,12 +277,14 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
   return (
     <div className="flex flex-col h-full w-full relative">
       <div className="absolute top-3 left-3 z-10">
-        <button
+        <motion.button
           onClick={(e) => { e.stopPropagation(); stopAll(); onClose(); }}
+          whileTap={{ scale: 0.9 }}
+          transition={{ type: "spring" as const, stiffness: 400, damping: 17 }}
           className="px-4 py-2 rounded-full bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors cursor-pointer"
         >
           Close
-        </button>
+        </motion.button>
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center select-none">

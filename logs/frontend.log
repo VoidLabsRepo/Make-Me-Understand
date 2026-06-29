@@ -1,0 +1,16 @@
+
+> frontend@0.2.13 start
+> next start -p 3007
+
+▲ Next.js 16.2.9
+- Local:         http://localhost:3007
+- Network:       http://192.168.29.237:3007
+✓ Ready in 112ms
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /home/axeus/pnpm-lock.yaml as the root directory.
+ To silence this warning, set `outputFileTracingRoot` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/output#caveats for more information.
+ Detected additional lockfiles: 
+   * /home/axeus/Documents/codes/making it easy/make-me-understand/frontend/package-lock.json
+
+⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.

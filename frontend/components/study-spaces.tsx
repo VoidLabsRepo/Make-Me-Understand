@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
 import { Loader2, Pencil, Trash2 } from "lucide-react";
 import {
   listStudySpaces,
@@ -11,6 +12,9 @@ import {
   type StudySpace,
 } from "@/lib/api";
 import { StudyFolder } from "@/components/study-folder";
+
+// ponytail: bouncy spring
+const bounce = { type: "spring" as const, stiffness: 400, damping: 17 }
 
 export function StudySpaces({ onCreated, showCreate, onCreateVisible }: { onCreated?: () => void; showCreate?: boolean; onCreateVisible?: () => void }) {
   const [spaces, setSpaces] = useState<StudySpace[]>([]);
@@ -138,21 +142,22 @@ export function StudySpaces({ onCreated, showCreate, onCreateVisible }: { onCrea
     <>
       {spaces.map((space) => (
         <div key={space.id} className="relative">
-          <Link
-            href={`/spaces/${space.id}`}
-            className="group relative flex flex-col items-center justify-between h-64 select-none p-5 transition-opacity hover:opacity-80"
-            onContextMenu={(e) => handleContextMenu(e, space.id)}
-            onPointerDown={() => handlePointerDown(space.id)}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-            onClick={(e) => {
-              if (didLongPress.current) {
-                e.preventDefault();
-                didLongPress.current = false;
-              }
-            }}
-          >
+          <motion.div whileTap={{ scale: 0.98 }} transition={bounce}>
+            <Link
+              href={`/spaces/${space.id}`}
+              className="group relative flex flex-col items-center justify-between h-64 select-none p-5 hover:opacity-80"
+              onContextMenu={(e) => handleContextMenu(e, space.id)}
+              onPointerDown={() => handlePointerDown(space.id)}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+              onClick={(e) => {
+                if (didLongPress.current) {
+                  e.preventDefault();
+                  didLongPress.current = false;
+                }
+              }}
+            >
             <div />
             <div className="flex-1 flex items-center justify-center">
               <StudyFolder sessions={space.sessions} />
@@ -173,90 +178,121 @@ export function StudySpaces({ onCreated, showCreate, onCreateVisible }: { onCrea
               <span className="font-medium text-sm">{space.name}</span>
             )}
           </Link>
+          </motion.div>
 
           {/* Context menu */}
-          {menuSpaceId === space.id && (
-            <div
-              ref={menuRef}
-              className="absolute right-0 bottom-full mb-2 w-36 rounded-xl border border-border bg-background shadow-md z-30 py-1"
-            >
-              <button
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-                onClick={() => {
-                  setMenuSpaceId(null);
-                  setRenamingId(space.id);
-                  setRenameValue(space.name);
-                }}
+          <AnimatePresence>
+            {menuSpaceId === space.id && (
+              <motion.div
+                ref={menuRef}
+                initial={{ opacity: 0, scale: 0.9, y: 4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 4 }}
+                transition={bounce}
+                className="absolute right-0 bottom-full mb-2 w-36 rounded-xl border border-border bg-background shadow-md z-30 py-1"
               >
-                <Pencil size={14} /> Rename
-              </button>
-              <button
-                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-muted transition-colors"
-                onClick={() => {
-                  setMenuSpaceId(null);
-                  setDeletingId(space.id);
-                }}
-              >
-                <Trash2 size={14} /> Delete
-              </button>
-            </div>
-          )}
+                <button
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                  onClick={() => {
+                    setMenuSpaceId(null);
+                    setRenamingId(space.id);
+                    setRenameValue(space.name);
+                  }}
+                >
+                  <Pencil size={14} /> Rename
+                </button>
+                <button
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-muted transition-colors"
+                  onClick={() => {
+                    setMenuSpaceId(null);
+                    setDeletingId(space.id);
+                  }}
+                >
+                  <Trash2 size={14} /> Delete
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Delete confirm */}
-          {deletingId === space.id && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-20 bg-background/95 rounded-lg">
-              <p className="text-sm text-muted-foreground">Delete this space?</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setDeletingId(null)}
-                  className="px-3 py-1 text-xs rounded-lg border hover:bg-muted"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleDelete(space.id)}
-                  className="px-3 py-1 text-xs rounded-lg bg-destructive text-white hover:bg-destructive/90"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          )}
+          <AnimatePresence>
+            {deletingId === space.id && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={bounce}
+                className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-20 bg-background/95 rounded-lg"
+              >
+                <p className="text-sm text-muted-foreground">Delete this space?</p>
+                <div className="flex gap-2">
+                  <motion.button
+                    onClick={() => setDeletingId(null)}
+                    whileTap={{ scale: 0.9 }}
+                    transition={bounce}
+                    className="px-3 py-1 text-xs rounded-lg border hover:bg-muted"
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    onClick={() => handleDelete(space.id)}
+                    whileTap={{ scale: 0.9 }}
+                    transition={bounce}
+                    className="px-3 py-1 text-xs rounded-lg bg-destructive text-white hover:bg-destructive/90"
+                  >
+                    Delete
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       ))}
 
-      {showInput && (
-        <div className="flex flex-col h-64 p-5">
-          <div className="flex-1 flex flex-col justify-center">
-            <input
-              autoFocus
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreate();
-                if (e.key === "Escape") setShowInput(false);
-              }}
-              placeholder="Space name..."
-              className="text-sm bg-muted/50 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-foreground/20 placeholder:text-muted-foreground mb-3"
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleCreate}
-              disabled={!newName.trim() || creating}
-              className="flex-1 py-2 rounded-xl bg-foreground text-background text-sm font-medium disabled:opacity-30"
-            >
-              {creating ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Create"}
-            </button>
-            <button
-              onClick={() => setShowInput(false)}
-              className="px-4 py-2 rounded-xl border text-sm text-muted-foreground hover:bg-muted"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {showInput && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={bounce}
+            className="flex flex-col h-64 p-5"
+          >
+            <div className="flex-1 flex flex-col justify-center">
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreate();
+                  if (e.key === "Escape") setShowInput(false);
+                }}
+                placeholder="Space name..."
+                className="text-sm bg-muted/50 rounded-xl px-4 py-2.5 outline-none focus:ring-1 focus:ring-foreground/20 placeholder:text-muted-foreground mb-3"
+              />
+            </div>
+            <div className="flex gap-2">
+              <motion.button
+                onClick={handleCreate}
+                disabled={!newName.trim() || creating}
+                whileTap={{ scale: 0.95 }}
+                transition={bounce}
+                className="flex-1 py-2 rounded-xl bg-foreground text-background text-sm font-medium disabled:opacity-30"
+              >
+                {creating ? <Loader2 size={14} className="animate-spin mx-auto" /> : "Create"}
+              </motion.button>
+              <motion.button
+                onClick={() => setShowInput(false)}
+                whileTap={{ scale: 0.95 }}
+                transition={bounce}
+                className="px-4 py-2 rounded-xl border text-sm text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

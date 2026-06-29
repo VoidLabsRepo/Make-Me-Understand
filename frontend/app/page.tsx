@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "motion/react";
 import { UploadDialog } from "@/components/upload-dialog";
 import { listSessions, renameSession, deleteSession, type SessionListItem } from "@/lib/api";
 import { BookOpen, MoreHorizontal, Pencil, Trash2, Check, X, FolderOpen } from "lucide-react";
@@ -9,6 +10,20 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
 import { StudySpaces } from "@/components/study-spaces";
+
+// ponytail: bouncy spring
+const bounce = { type: "spring" as const, stiffness: 400, damping: 17 }
+
+// ponytail: stagger container for session cards
+const stagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06 } },
+}
+
+const cardPop = {
+  hidden: { opacity: 0, y: 20, scale: 0.95 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: bounce },
+}
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -122,19 +137,29 @@ export default function Dashboard() {
 
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-medium text-muted-foreground">Recent Sessions</h2>
-              <button
+              <motion.button
                 onClick={() => setShowCreateSpace(true)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                whileTap={{ scale: 0.9 }}
+                transition={bounce}
+                className="text-muted-foreground hover:text-foreground"
                 title="Create study space"
               >
                 <FolderOpen size={18} />
-              </button>
+              </motion.button>
             </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <motion.div
+                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+                variants={stagger}
+                initial="hidden"
+                animate="visible"
+              >
                 {sessions.map((s) => (
-                  <div
+                  <motion.div
                     key={s.id}
-                    className="group relative flex flex-col rounded-3xl border border-border bg-surface h-64 transition-colors hover:border-border/80 select-none"
+                    variants={cardPop}
+                    whileTap={{ scale: 0.98 }}
+                    transition={bounce}
+                    className="group relative flex flex-col rounded-3xl border border-border bg-surface h-64 select-none"
                     onPointerDown={() => handlePointerDown(s.id)}
                     onPointerUp={handlePointerUp}
                     onPointerCancel={handlePointerUp}
@@ -200,49 +225,65 @@ export default function Dashboard() {
                           <MoreHorizontal size={14} />
                         </Button>
 
-                        {menuOpenId === s.id && (
-                          <div className="absolute right-0 top-full mt-1 w-36 rounded-xl border border-border bg-background shadow-md z-20 py-1">
-                            <button
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-                              onClick={() => {
-                                setMenuOpenId(null);
-                                setEditingId(s.id);
-                                setEditValue(s.title);
-                              }}
+                        <AnimatePresence>
+                          {menuOpenId === s.id && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.9, y: -4 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                              transition={bounce}
+                              className="absolute right-0 top-full mt-1 w-36 rounded-xl border border-border bg-background shadow-md z-20 py-1"
                             >
-                              <Pencil size={14} /> Rename
-                            </button>
-                            <button
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-muted transition-colors"
-                              onClick={() => {
-                                setMenuOpenId(null);
-                                setDeletingId(s.id);
-                              }}
-                            >
-                              <Trash2 size={14} /> Delete
-                            </button>
-                          </div>
-                        )}
+                              <button
+                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                                onClick={() => {
+                                  setMenuOpenId(null);
+                                  setEditingId(s.id);
+                                  setEditValue(s.title);
+                                }}
+                              >
+                                <Pencil size={14} /> Rename
+                              </button>
+                              <button
+                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-muted transition-colors"
+                                onClick={() => {
+                                  setMenuOpenId(null);
+                                  setDeletingId(s.id);
+                                }}
+                              >
+                                <Trash2 size={14} /> Delete
+                              </button>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     )}
 
-                    {deletingId === s.id && (
-                      <div className="absolute inset-0 rounded-3xl bg-surface/95 flex flex-col items-center justify-center gap-3 z-10">
-                        <p className="text-sm text-muted-foreground">Delete this session?</p>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => setDeletingId(null)}>
-                            Cancel
-                          </Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDelete(s.id)}>
-                            Delete
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    <AnimatePresence>
+                      {deletingId === s.id && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          transition={bounce}
+                          className="absolute inset-0 rounded-3xl bg-surface/95 flex flex-col items-center justify-center gap-3 z-10"
+                        >
+                          <p className="text-sm text-muted-foreground">Delete this session?</p>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => setDeletingId(null)}>
+                              Cancel
+                            </Button>
+                            <Button variant="destructive" size="sm" onClick={() => handleDelete(s.id)}>
+                              Delete
+                            </Button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
                 ))}
                 <StudySpaces showCreate={showCreateSpace} onCreateVisible={() => setShowCreateSpace(false)} />
-              </div>
+              </motion.div>
           </div>
         </div>
         <ProgressiveBlur position="top" backgroundColor="#f0f0f0" />

@@ -3,11 +3,15 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { motion, AnimatePresence } from "motion/react";
 import { sendMessage, appendImages } from "@/lib/api";
 import { Persona } from "@/components/ai-elements/persona";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
 import { Plus, Send, Paperclip, Image as ImageIcon, X, Loader2 } from "lucide-react";
+
+// ponytail: bouncy spring for interactive elements
+const bounce = { type: "spring" as const, stiffness: 400, damping: 17 }
 
 interface ChatPanelProps {
   sessionId: number;
@@ -218,8 +222,11 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
             </div>
           )}
           {messages.map((msg, i) => (
-            <div
+            <motion.div
               key={i}
+              initial={{ opacity: 0, y: 12, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={bounce}
               className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
@@ -237,7 +244,7 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
                   msg.content
                 )}
               </div>
-            </div>
+            </motion.div>
           ))}
           {loading && (
             <div className="flex justify-start py-2">
@@ -263,12 +270,14 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
                   alt={att.file.name}
                   className="w-16 h-16 md:w-20 md:h-20 rounded-xl object-contain bg-muted border border-border/50"
                 />
-                <button
+                <motion.button
                   onClick={() => removeAttachment(i)}
+                  whileTap={{ scale: 0.8 }}
+                  transition={bounce}
                   className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <X size={10} />
-                </button>
+                </motion.button>
               </div>
             ))}
           </div>
@@ -306,25 +315,29 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
             )}
 
             <div className={`flex items-center gap-2 md:gap-3 px-3 md:px-4 ${expanded ? "py-2" : "py-2.5 md:py-3"}`}>
-              <button
+              <motion.button
                 type="button"
                 onClick={() => setExpanded(!expanded)}
-                className={`hidden md:flex w-8 h-8 rounded-full items-center justify-center text-muted-foreground transition-all shrink-0 ${
+                whileTap={{ scale: 0.85 }}
+                transition={bounce}
+                className={`hidden md:flex w-8 h-8 rounded-full items-center justify-center text-muted-foreground shrink-0 ${
                   expanded
                     ? "bg-foreground text-background rotate-45"
                     : "bg-muted hover:bg-muted/80"
                 }`}
               >
                 <Plus size={18} />
-              </button>
+              </motion.button>
               {/* Mobile: direct file trigger */}
-              <button
+              <motion.button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="md:hidden flex w-8 h-8 rounded-full bg-muted items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors shrink-0"
+                whileTap={{ scale: 0.85 }}
+                transition={bounce}
+                className="md:hidden flex w-8 h-8 rounded-full bg-muted items-center justify-center text-muted-foreground hover:bg-muted/80 shrink-0"
               >
                 <Plus size={18} />
-              </button>
+              </motion.button>
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -333,13 +346,15 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
                 disabled={loading}
                 className="flex-1 min-w-0 bg-transparent outline-none text-sm md:text-base placeholder:text-muted-foreground"
               />
-              <button
+              <motion.button
                 onClick={() => handleSend()}
                 disabled={loading || !hasContent}
-                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 transition-colors disabled:opacity-30 shrink-0"
+                whileTap={{ scale: 0.85 }}
+                transition={bounce}
+                className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-muted flex items-center justify-center text-muted-foreground hover:bg-muted/80 disabled:opacity-30 shrink-0"
               >
                 <Send size={18} />
-              </button>
+              </motion.button>
             </div>
           </div>
 
@@ -357,13 +372,15 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
           />
 
           {/* Halo: tap = voice mode, long press = push-to-talk */}
-          <button
+          <motion.button
             onMouseDown={handleHaloDown}
             onMouseUp={handleHaloUp}
             onMouseLeave={handleHaloUp}
             onTouchStart={handleHaloDown}
             onTouchEnd={handleHaloUp}
-            className={`w-10 h-10 md:w-12 md:h-12 rounded-xl border bg-white flex items-center justify-center transition-all shrink-0 select-none active:scale-95 ${
+            whileTap={{ scale: 0.9 }}
+            transition={bounce}
+            className={`w-10 h-10 md:w-12 md:h-12 rounded-xl border bg-white flex items-center justify-center shrink-0 select-none ${
               recording
                 ? "border-red-400 bg-red-50 shadow-[0_0_12px_rgba(239,68,68,0.25)]"
                 : "hover:bg-muted"
@@ -374,7 +391,7 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
               state={recording ? "listening" : "idle"}
               className="!size-6 md:!size-8"
             />
-          </button>
+          </motion.button>
         </div>
       </div>
     </div>
