@@ -4,14 +4,12 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { motion, AnimatePresence } from "motion/react";
+import { bounce } from "@/lib/animations";
 import { sendMessage, appendImages } from "@/lib/api";
 import { Persona } from "@/components/ai-elements/persona";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
 import { Plus, Send, Paperclip, Image as ImageIcon, X, Loader2 } from "lucide-react";
-
-// ponytail: bouncy spring for interactive elements
-const bounce = { type: "spring" as const, stiffness: 400, damping: 17 }
 
 interface ChatPanelProps {
   sessionId: number;

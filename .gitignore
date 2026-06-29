@@ -10,3 +10,4 @@ data/
 .DS_Store
 backend/cache/
 logs/
+.fallow/

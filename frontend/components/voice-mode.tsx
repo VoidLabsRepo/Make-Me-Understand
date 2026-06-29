@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "motion/react";
+import { bounce } from "@/lib/animations";
 import { Persona } from "@/components/ai-elements/persona";
 import type { PersonaState } from "@/components/ai-elements/persona";
 import { sendVoiceMessage } from "@/lib/api";
@@ -280,7 +281,7 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
         <motion.button
           onClick={(e) => { e.stopPropagation(); stopAll(); onClose(); }}
           whileTap={{ scale: 0.9 }}
-          transition={{ type: "spring" as const, stiffness: 400, damping: 17 }}
+          transition={bounce}
           className="px-4 py-2 rounded-full bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors cursor-pointer"
         >
           Close

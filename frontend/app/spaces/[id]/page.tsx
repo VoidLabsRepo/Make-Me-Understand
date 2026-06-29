@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
+import { bounce, stagger, cardPop } from "@/lib/animations";
 import { ArrowLeft, Plus, Loader2, Trash2 } from "lucide-react";
 import {
   getStudySpace,
@@ -13,19 +14,6 @@ import {
   type StudySpaceDetail,
   type SessionListItem,
 } from "@/lib/api";
-
-// ponytail: bouncy spring
-const bounce = { type: "spring" as const, stiffness: 400, damping: 17 }
-
-const stagger = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.06 } },
-}
-
-const cardPop = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: bounce },
-}
 
 export default function SpaceDetailPage() {
   const params = useParams();

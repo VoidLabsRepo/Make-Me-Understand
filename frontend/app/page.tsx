@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
+import { bounce, stagger, cardPop } from "@/lib/animations";
 import { UploadDialog } from "@/components/upload-dialog";
 import { listSessions, renameSession, deleteSession, type SessionListItem } from "@/lib/api";
 import { BookOpen, MoreHorizontal, Pencil, Trash2, Check, X, FolderOpen } from "lucide-react";
@@ -10,20 +11,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
 import { StudySpaces } from "@/components/study-spaces";
-
-// ponytail: bouncy spring
-const bounce = { type: "spring" as const, stiffness: 400, damping: 17 }
-
-// ponytail: stagger container for session cards
-const stagger = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.06 } },
-}
-
-const cardPop = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: bounce },
-}
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);

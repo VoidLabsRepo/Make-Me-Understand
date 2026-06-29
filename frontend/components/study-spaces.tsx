@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "motion/react";
+import { bounce } from "@/lib/animations";
 import { Loader2, Pencil, Trash2 } from "lucide-react";
 import {
   listStudySpaces,
@@ -12,9 +13,6 @@ import {
   type StudySpace,
 } from "@/lib/api";
 import { StudyFolder } from "@/components/study-folder";
-
-// ponytail: bouncy spring
-const bounce = { type: "spring" as const, stiffness: 400, damping: 17 }
 
 export function StudySpaces({ onCreated, showCreate, onCreateVisible }: { onCreated?: () => void; showCreate?: boolean; onCreateVisible?: () => void }) {
   const [spaces, setSpaces] = useState<StudySpace[]>([]);

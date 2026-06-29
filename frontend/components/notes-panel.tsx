@@ -2,13 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "motion/react";
+import { bounce } from "@/lib/animations";
 import { Plus, X, FileText } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { listNotes, createNote, updateNote, deleteNote, type Note } from "@/lib/api";
-
-// ponytail: bouncy spring
-const bounce = { type: "spring" as const, stiffness: 400, damping: 17 }
 
 interface NotesPanelProps {
   sessionId: number;
