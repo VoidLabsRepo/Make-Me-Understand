@@ -249,3 +249,44 @@ export async function removeSessionFromSpace(spaceId: number, sessionId: number)
   if (!res.ok) throw new Error("Failed to remove session from space");
 }
 
+// Settings
+
+export interface LLMSettings {
+  configured: boolean;
+  provider?: string;
+  model?: string;
+  api_key_masked?: string;
+  api_base?: string;
+}
+
+export async function getSettings(): Promise<LLMSettings> {
+  const res = await fetch(`${API_BASE}/api/settings`);
+  if (!res.ok) throw new Error("Failed to get settings");
+  return res.json();
+}
+
+export async function saveSettings(data: {
+  provider: string;
+  model: string;
+  api_key?: string;
+  api_base?: string;
+}): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to save settings");
+}
+
+export async function listModels(provider: string, api_key?: string, api_base?: string): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/api/models`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, api_key, api_base }),
+  });
+  if (!res.ok) throw new Error("Failed to list models");
+  const data = await res.json();
+  return data.models;
+}
+

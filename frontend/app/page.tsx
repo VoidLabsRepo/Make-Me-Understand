@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
 import { StudySpaces } from "@/components/study-spaces";
+import { ProviderDock } from "@/components/provider-dock";
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -108,7 +109,7 @@ export default function Dashboard() {
           className="absolute inset-0 overflow-y-auto"
           style={{ overflowX: "visible" }}
         >
-          <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-16" style={{ overflow: "visible" }}>
+            <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-16 pb-28" style={{ overflow: "visible" }}>
             <div className="flex flex-col items-center text-center mb-16 relative z-10">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
@@ -278,6 +279,7 @@ export default function Dashboard() {
           <ProgressiveBlur position="bottom" backgroundColor="#f0f0f0" />
         </div>
       </div>
+      <ProviderDock />
     </div>
   );
 }
