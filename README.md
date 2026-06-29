@@ -12,7 +12,7 @@ Upload your study materials, and let AI turn them into easy-to-understand notes 
 
 ## Features
 
-### AI Tutor — Void X1
+### AI Tutor
 - Structured teaching: Direct Answer → Breakdown → Example → Check-in
 - Real-world analogies and step-by-step explanations
 - Notes formatted with markdown (headers, bullets, bold)

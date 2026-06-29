@@ -34,7 +34,7 @@ export function UploadDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button className="text-lg px-10 py-6 rounded-2xl" />}>
-        Start Learning
+        Understand Now
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
