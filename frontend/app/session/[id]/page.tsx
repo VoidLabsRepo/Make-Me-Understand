@@ -208,7 +208,13 @@ export default function SessionPage() {
             <VoiceMode sessionId={session.id} notes={session.notes || ""} onClose={() => setVoiceMode(false)} onNoteChange={handleNoteChange} />
           </div>
           <AnimatePresence mode="popLayout">
-            {notesOpen && <MobileNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} onClose={closeNotes} />}
+            {notesOpen && (
+              isMobile ? (
+                <MobileNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} onClose={closeNotes} />
+              ) : (
+                <DesktopNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} />
+              )
+            )}
           </AnimatePresence>
         </div>
       </div>
