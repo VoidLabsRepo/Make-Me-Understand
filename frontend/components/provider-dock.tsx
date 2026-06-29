@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { bounce } from "@/lib/animations";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Check, ChevronDown, Loader2 } from "lucide-react";
+import { Check, ChevronDown, Loader2, Settings } from "lucide-react";
 import {
   getSettings,
   saveSettings,
@@ -17,7 +17,6 @@ const PROVIDERS = [
   {
     id: "opencode_go",
     name: "OpenCode",
-    color: "#000000",
     needsKey: true,
     icon: (size: number) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -28,7 +27,6 @@ const PROVIDERS = [
   {
     id: "openai",
     name: "OpenAI",
-    color: "#10a37f",
     needsKey: true,
     icon: (size: number) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -39,7 +37,6 @@ const PROVIDERS = [
   {
     id: "anthropic",
     name: "Anthropic",
-    color: "#d97706",
     needsKey: true,
     icon: (size: number) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -50,7 +47,6 @@ const PROVIDERS = [
   {
     id: "gemini",
     name: "Gemini",
-    color: "#4285f4",
     needsKey: true,
     icon: (size: number) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -61,7 +57,6 @@ const PROVIDERS = [
   {
     id: "ollama",
     name: "Ollama",
-    color: "#ffffff",
     needsKey: false,
     icon: (size: number) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -71,7 +66,12 @@ const PROVIDERS = [
   },
 ];
 
-export function ProviderDock() {
+interface ProviderDockProps {
+  forceShow?: boolean;
+  onForceShowChange?: (v: boolean) => void;
+}
+
+export function ProviderDock({ forceShow, onForceShowChange }: ProviderDockProps) {
   const [settings, setSettings] = useState<LLMSettings | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
@@ -84,6 +84,8 @@ export function ProviderDock() {
   useEffect(() => {
     getSettings().then(setSettings).catch(console.error);
   }, []);
+
+  const showDock = !settings?.configured || forceShow;
 
   const handleProviderClick = useCallback((providerId: string) => {
     if (selectedProvider === providerId) {
@@ -137,42 +139,66 @@ export function ProviderDock() {
         model: selectedModel,
         api_key_masked: apiKey ? `••••${apiKey.slice(-4)}` : settings?.api_key_masked,
       });
+      if (onForceShowChange) onForceShowChange(false);
     } catch (e) {
       console.error("Failed to save settings:", e);
     } finally {
       setSaving(false);
     }
-  }, [selectedProvider, selectedModel, apiKey, settings]);
+  }, [selectedProvider, selectedModel, apiKey, settings, onForceShowChange]);
 
-  const activeProvider = PROVIDERS.find((p) => p.id === settings?.provider);
+  // Gear icon only — shown when configured and dock is hidden
+  if (settings?.configured && !showDock) {
+    return (
+      <motion.button
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={bounce}
+        onClick={() => {
+          setSelectedProvider(settings.provider || null);
+          setShowPanel(true);
+          if (onForceShowChange) onForceShowChange(true);
+        }}
+        className="fixed bottom-5 right-5 z-50 w-10 h-10 rounded-xl bg-background/80 backdrop-blur-xl border border-border shadow-lg flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+        title="Change LLM provider"
+      >
+        <Settings size={18} />
+      </motion.button>
+    );
+  }
+
+  if (!showDock) return null;
+
+  const providerObj = selectedProvider ? PROVIDERS.find((p) => p.id === selectedProvider) : null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex flex-col items-center pointer-events-none">
-      {/* Config panel */}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex flex-col items-center gap-6"
+    >
+      {/* Config panel — slides down below dock */}
       <AnimatePresence>
         {showPanel && selectedProvider && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={{ opacity: 0, y: -10, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            exit={{ opacity: 0, y: -10, scale: 0.97 }}
             transition={bounce}
-            className="pointer-events-auto mb-3 w-full max-w-md mx-4 rounded-2xl border border-border bg-background/95 backdrop-blur-xl shadow-2xl p-5"
+            className="w-full max-w-md rounded-2xl border border-border bg-background/95 backdrop-blur-xl shadow-2xl p-5"
           >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-sm">
-                {PROVIDERS.find((p) => p.id === selectedProvider)?.name} Settings
-              </h3>
+              <h3 className="font-semibold text-sm">{providerObj?.name} Settings</h3>
               {settings?.configured && settings?.provider === selectedProvider && (
-                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                  Active
-                </span>
+                <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">Active</span>
               )}
             </div>
 
-            {PROVIDERS.find((p) => p.id === selectedProvider)?.needsKey && (
+            {providerObj?.needsKey && (
               <div className="mb-3">
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  {PROVIDERS.find((p) => p.id === selectedProvider)?.name} API Key
+                  {providerObj?.name} API Key
                 </label>
                 <input
                   type="password"
@@ -190,7 +216,7 @@ export function ProviderDock() {
                 {models.length === 0 && (
                   <button
                     onClick={handleLoadModels}
-                    disabled={loadingModels || (PROVIDERS.find((p) => p.id === selectedProvider)?.needsKey && !apiKey)}
+                    disabled={loadingModels || (providerObj?.needsKey && !apiKey)}
                     className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
                   >
                     {loadingModels ? "Loading..." : "Load models"}
@@ -213,7 +239,7 @@ export function ProviderDock() {
                 </div>
               ) : (
                 <div className="px-3 py-2 text-sm text-muted-foreground rounded-xl border border-dashed border-input">
-                  {loadingModels ? "Fetching models..." : "Enter API key and click Load models"}
+                  {loadingModels ? "Fetching models..." : providerObj?.needsKey ? "Enter API key and click Load models" : "Click Load models"}
                 </div>
               )}
             </div>
@@ -236,41 +262,39 @@ export function ProviderDock() {
       </AnimatePresence>
 
       {/* Dock */}
-      <div className="pointer-events-auto mb-4">
-        <motion.div
-          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl border border-border bg-background/90 backdrop-blur-xl shadow-lg"
-          initial={{ y: 40, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ ...bounce, delay: 0.2 }}
-        >
-          {PROVIDERS.map((provider) => {
-            const isActive = settings?.configured && settings?.provider === provider.id;
-            const isSelected = selectedProvider === provider.id;
-            return (
-              <motion.button
-                key={provider.id}
-                whileTap={{ scale: 0.9 }}
-                transition={bounce}
-                onClick={() => handleProviderClick(provider.id)}
-                className={cn(
-                  "relative w-11 h-11 rounded-xl flex items-center justify-center transition-all duration-200",
-                  isSelected
-                    ? "bg-foreground text-background shadow-md scale-110"
-                    : isActive
-                    ? "bg-foreground/10 text-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                )}
-                title={provider.name}
-              >
-                {provider.icon(20)}
-                {isActive && !isSelected && (
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
-                )}
-              </motion.button>
-            );
-          })}
-        </motion.div>
-      </div>
-    </div>
+      <motion.div
+        className="flex items-center gap-3 px-5 py-3 rounded-2xl border border-border bg-background/90 backdrop-blur-xl shadow-lg"
+        initial={{ y: 30, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ ...bounce, delay: 0.15 }}
+      >
+        {PROVIDERS.map((provider) => {
+          const isActive = settings?.configured && settings?.provider === provider.id;
+          const isSelected = selectedProvider === provider.id;
+          return (
+            <motion.button
+              key={provider.id}
+              whileTap={{ scale: 0.9 }}
+              transition={bounce}
+              onClick={() => handleProviderClick(provider.id)}
+              className={cn(
+                "relative w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-200",
+                isSelected
+                  ? "bg-foreground text-background shadow-md scale-110"
+                  : isActive
+                  ? "bg-foreground/10 text-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+              )}
+              title={provider.name}
+            >
+              {provider.icon(28)}
+              {isActive && !isSelected && (
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
+              )}
+            </motion.button>
+          );
+        })}
+      </motion.div>
+    </motion.div>
   );
 }

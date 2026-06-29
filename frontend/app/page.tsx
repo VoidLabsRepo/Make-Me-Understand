@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
   const [showCreateSpace, setShowCreateSpace] = useState(false);
   const [bottomBlurOpacity, setBottomBlurOpacity] = useState(1);
+  const [forceDockShow, setForceDockShow] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -109,7 +110,7 @@ export default function Dashboard() {
           className="absolute inset-0 overflow-y-auto"
           style={{ overflowX: "visible" }}
         >
-            <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-16 pb-28" style={{ overflow: "visible" }}>
+          <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-16 pb-28" style={{ overflow: "visible" }}>
             <div className="flex flex-col items-center text-center mb-16 relative z-10">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
@@ -121,6 +122,11 @@ export default function Dashboard() {
                 Upload your study materials. AI will synthesize notes, explain concepts, and help you truly understand.
               </p>
               <UploadDialog />
+            </div>
+
+            {/* Centered dock — first-time or re-open */}
+            <div className="flex justify-center mb-12">
+              <ProviderDock forceShow={forceDockShow} onForceShowChange={setForceDockShow} />
             </div>
 
             <div className="flex items-center justify-between mb-4">
@@ -135,143 +141,143 @@ export default function Dashboard() {
                 <FolderOpen size={18} />
               </motion.button>
             </div>
-              <motion.div
-                className="grid grid-cols-1 sm:grid-cols-2 gap-4"
-                variants={stagger}
-                initial="hidden"
-                animate="visible"
-              >
-                {sessions.map((s) => (
-                  <motion.div
-                    key={s.id}
-                    variants={cardPop}
-                    whileTap={{ scale: 0.98 }}
-                    transition={bounce}
-                    className="group relative flex flex-col rounded-3xl border border-border bg-surface h-64 select-none"
-                    onPointerDown={() => handlePointerDown(s.id)}
-                    onPointerUp={handlePointerUp}
-                    onPointerCancel={handlePointerUp}
-                    onPointerLeave={handlePointerUp}
-                  >
-                    <div className="flex flex-col gap-3 px-5 pt-6 pb-4 flex-1">
-                      {editingId === s.id ? (
-                        <div className="flex items-center gap-1">
-                          <input
-                            ref={inputRef}
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") handleRename(s.id);
-                              if (e.key === "Escape") setEditingId(null);
-                            }}
-                            onBlur={() => handleRename(s.id)}
-                            className="font-medium text-xl tracking-tight bg-transparent border-b border-foreground outline-none w-full"
-                          />
-                          <Button variant="ghost" size="icon-xs" onClick={() => handleRename(s.id)}>
-                            <Check size={14} />
+            <motion.div
+              className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+              variants={stagger}
+              initial="hidden"
+              animate="visible"
+            >
+              {sessions.map((s) => (
+                <motion.div
+                  key={s.id}
+                  variants={cardPop}
+                  whileTap={{ scale: 0.98 }}
+                  transition={bounce}
+                  className="group relative flex flex-col rounded-3xl border border-border bg-surface h-64 select-none"
+                  onPointerDown={() => handlePointerDown(s.id)}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerUp}
+                  onPointerLeave={handlePointerUp}
+                >
+                  <div className="flex flex-col gap-3 px-5 pt-6 pb-4 flex-1">
+                    {editingId === s.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          ref={inputRef}
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleRename(s.id);
+                            if (e.key === "Escape") setEditingId(null);
+                          }}
+                          onBlur={() => handleRename(s.id)}
+                          className="font-medium text-xl tracking-tight bg-transparent border-b border-foreground outline-none w-full"
+                        />
+                        <Button variant="ghost" size="icon-xs" onClick={() => handleRename(s.id)}>
+                          <Check size={14} />
+                        </Button>
+                        <Button variant="ghost" size="icon-xs" onClick={() => setEditingId(null)}>
+                          <X size={14} />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Link
+                        href={`/session/${s.id}`}
+                        className="font-medium text-xl tracking-tight text-foreground hover:underline line-clamp-2"
+                        onClick={(e) => {
+                          if (longPressTriggered.current) {
+                            e.preventDefault();
+                            longPressTriggered.current = false;
+                          }
+                        }}
+                      >
+                        {s.title.replace(/\*\*/g, "").replace(/^Q\d*:\s*/, "")}
+                      </Link>
+                    )}
+                    <span className="text-sm text-muted-foreground">
+                      {new Date(s.created_at).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+
+                  {editingId !== s.id && (
+                    <div
+                      ref={menuOpenId === s.id ? menuRef : undefined}
+                      className={cn(
+                        "absolute top-3 right-3 transition-opacity",
+                        menuOpenId === s.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                      )}
+                    >
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        onClick={() => setMenuOpenId(menuOpenId === s.id ? null : s.id)}
+                      >
+                        <MoreHorizontal size={14} />
+                      </Button>
+
+                      <AnimatePresence>
+                        {menuOpenId === s.id && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: -4 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: -4 }}
+                            transition={bounce}
+                            className="absolute right-0 top-full mt-1 w-36 rounded-xl border border-border bg-background shadow-md z-20 py-1"
+                          >
+                            <button
+                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                              onClick={() => {
+                                setMenuOpenId(null);
+                                setEditingId(s.id);
+                                setEditValue(s.title);
+                              }}
+                            >
+                              <Pencil size={14} /> Rename
+                            </button>
+                            <button
+                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-muted transition-colors"
+                              onClick={() => {
+                                setMenuOpenId(null);
+                                setDeletingId(s.id);
+                              }}
+                            >
+                              <Trash2 size={14} /> Delete
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+
+                  <AnimatePresence>
+                    {deletingId === s.id && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={bounce}
+                        className="absolute inset-0 rounded-3xl bg-surface/95 flex flex-col items-center justify-center gap-3 z-10"
+                      >
+                        <p className="text-sm text-muted-foreground">Delete this session?</p>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => setDeletingId(null)}>
+                            Cancel
                           </Button>
-                          <Button variant="ghost" size="icon-xs" onClick={() => setEditingId(null)}>
-                            <X size={14} />
+                          <Button variant="destructive" size="sm" onClick={() => handleDelete(s.id)}>
+                            Delete
                           </Button>
                         </div>
-                      ) : (
-                        <Link
-                          href={`/session/${s.id}`}
-                          className="font-medium text-xl tracking-tight text-foreground hover:underline line-clamp-2"
-                          onClick={(e) => {
-                            if (longPressTriggered.current) {
-                              e.preventDefault();
-                              longPressTriggered.current = false;
-                            }
-                          }}
-                        >
-                          {s.title.replace(/\*\*/g, "").replace(/^Q\d*:\s*/, "")}
-                        </Link>
-                      )}
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(s.created_at).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </span>
-                    </div>
-
-                    {editingId !== s.id && (
-                      <div
-                        ref={menuOpenId === s.id ? menuRef : undefined}
-                        className={cn(
-                          "absolute top-3 right-3 transition-opacity",
-                          menuOpenId === s.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                        )}
-                      >
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={() => setMenuOpenId(menuOpenId === s.id ? null : s.id)}
-                        >
-                          <MoreHorizontal size={14} />
-                        </Button>
-
-                        <AnimatePresence>
-                          {menuOpenId === s.id && (
-                            <motion.div
-                              initial={{ opacity: 0, scale: 0.9, y: -4 }}
-                              animate={{ opacity: 1, scale: 1, y: 0 }}
-                              exit={{ opacity: 0, scale: 0.9, y: -4 }}
-                              transition={bounce}
-                              className="absolute right-0 top-full mt-1 w-36 rounded-xl border border-border bg-background shadow-md z-20 py-1"
-                            >
-                              <button
-                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
-                                onClick={() => {
-                                  setMenuOpenId(null);
-                                  setEditingId(s.id);
-                                  setEditValue(s.title);
-                                }}
-                              >
-                                <Pencil size={14} /> Rename
-                              </button>
-                              <button
-                                className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-muted transition-colors"
-                                onClick={() => {
-                                  setMenuOpenId(null);
-                                  setDeletingId(s.id);
-                                }}
-                              >
-                                <Trash2 size={14} /> Delete
-                              </button>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
+                      </motion.div>
                     )}
-
-                    <AnimatePresence>
-                      {deletingId === s.id && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.9 }}
-                          transition={bounce}
-                          className="absolute inset-0 rounded-3xl bg-surface/95 flex flex-col items-center justify-center gap-3 z-10"
-                        >
-                          <p className="text-sm text-muted-foreground">Delete this session?</p>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm" onClick={() => setDeletingId(null)}>
-                              Cancel
-                            </Button>
-                            <Button variant="destructive" size="sm" onClick={() => handleDelete(s.id)}>
-                              Delete
-                            </Button>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                ))}
-                <StudySpaces showCreate={showCreateSpace} onCreateVisible={() => setShowCreateSpace(false)} />
-              </motion.div>
+                  </AnimatePresence>
+                </motion.div>
+              ))}
+              <StudySpaces showCreate={showCreateSpace} onCreateVisible={() => setShowCreateSpace(false)} />
+            </motion.div>
           </div>
         </div>
         <ProgressiveBlur position="top" backgroundColor="#f0f0f0" />
@@ -279,7 +285,6 @@ export default function Dashboard() {
           <ProgressiveBlur position="bottom" backgroundColor="#f0f0f0" />
         </div>
       </div>
-      <ProviderDock />
     </div>
   );
 }
