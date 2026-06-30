@@ -35,8 +35,8 @@ async def _fetch_canvases_list(db: aiosqlite.Connection, session_id: int) -> lis
 def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
     """Extract JSON tool calls from ```json code blocks. Returns (cleaned_response, tool_calls)."""
     tool_calls = []
-    # Match ```json\n{...}\n``` blocks
-    pattern = r'```json\s*\n\s*(\{[^`]+?\})\s*\n\s*```'
+    # Match ```json\n{...}\n``` blocks (but not ```json reasoning blocks)
+    pattern = r'```json\s*\n\s*(\{(?!\s*"reasoning")[^`]+?\})\s*\n\s*```'
     matches = list(re.finditer(pattern, response, re.DOTALL))
     clean_response = response
     for m in matches:
@@ -119,6 +119,33 @@ def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
         # Remove the matched block from response
         clean_response = clean_response.replace(m.group(0), "", 1)
     return clean_response.strip(), tool_calls
+
+
+def _parse_reasoning(response: str) -> tuple[str, list[dict]]:
+    """Extract ```json reasoning blocks. Returns (cleaned_response, reasoning_steps)."""
+    pattern = r'```json(?:\s*reasoning)?\s*\n\s*(\[[\s\S]+?\])\s*\n\s*```'
+    reasoning_steps: list[dict] = []
+    clean = response
+    for m in list(re.finditer(pattern, response)):
+        try:
+            steps = json.loads(m.group(1))
+            if not isinstance(steps, list):
+                continue
+            for s in steps:
+                if not isinstance(s, dict):
+                    continue
+                label = str(s.get("label", "")).strip()
+                if not label:
+                    continue
+                reasoning_steps.append({
+                    "label": label,
+                    "description": str(s.get("description", "")).strip(),
+                    "status": s.get("status", "complete"),
+                })
+        except (json.JSONDecodeError, TypeError):
+            pass
+        clean = clean.replace(m.group(0), "", 1)
+    return clean.strip(), reasoning_steps
 
 
 async def _execute_tool_calls(db: aiosqlite.Connection, session_id: int, tool_calls: list[dict]) -> dict:
@@ -250,14 +277,15 @@ async def chat(
 
     # Parse and execute tool calls
     clean_response, tool_calls = _parse_tool_calls(response)
+    clean_response, reasoning = _parse_reasoning(clean_response)
     tool_results = await _execute_tool_calls(db, session_id, tool_calls)
     note_changes = tool_results["note_changes"]
     canvas_changes = tool_results["canvas_changes"]
 
     # Save clean AI response (without tool call lines)
     await db.execute(
-        "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
-        (session_id, "assistant", clean_response),
+        "INSERT INTO messages (session_id, role, content, reasoning) VALUES (?, ?, ?, ?)",
+        (session_id, "assistant", clean_response, json.dumps(reasoning)),
     )
     await db.commit()
 
@@ -282,7 +310,7 @@ async def chat(
             except Exception:
                 pass  # title generation is best-effort
 
-    return {"response": clean_response, "note_changes": note_changes, "canvas_changes": canvas_changes}
+    return {"response": clean_response, "reasoning": reasoning, "note_changes": note_changes, "canvas_changes": canvas_changes}
 
 
 @router.post("/{session_id}/voice-chat")
@@ -347,6 +375,7 @@ async def voice_chat(
 
     # Parse and execute note + canvas tool calls before cleaning text
     clean_response, tool_calls = _parse_tool_calls(raw_response)
+    clean_response, reasoning = _parse_reasoning(clean_response)
     tool_results = await _execute_tool_calls(db, session_id, tool_calls)
     note_changes = tool_results["note_changes"]
     canvas_changes = tool_results["canvas_changes"]
@@ -374,8 +403,8 @@ async def voice_chat(
 
     # Save AI response
     await db.execute(
-        "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
-        (session_id, "assistant", response),
+        "INSERT INTO messages (session_id, role, content, reasoning) VALUES (?, ?, ?, ?)",
+        (session_id, "assistant", response, json.dumps(reasoning)),
     )
     await db.commit()
 
@@ -400,7 +429,7 @@ async def voice_chat(
             except Exception:
                 pass
 
-    return {"response": response, "word_timings": timings, "note_changes": note_changes, "canvas_changes": canvas_changes}
+    return {"response": response, "reasoning": reasoning, "word_timings": timings, "note_changes": note_changes, "canvas_changes": canvas_changes}
 
 
 class TTSRequest(BaseModel):

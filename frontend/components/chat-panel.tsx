@@ -5,19 +5,32 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { motion, AnimatePresence } from "motion/react";
 import { bounce } from "@/lib/animations";
-import { sendMessage, appendImages, getMessages } from "@/lib/api";
+import { sendMessage, appendImages, getMessages, type ReasoningStep } from "@/lib/api";
 import { Persona } from "@/components/ai-elements/persona";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
+import {
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+} from "@/components/ai-elements/chain-of-thought";
 import { Plus, Send, Paperclip, Image as ImageIcon, X, Loader2 } from "lucide-react";
 
 interface ChatPanelProps {
   sessionId: number;
-  initialMessages: { id: number; role: string; content: string }[];
+  initialMessages: { id: number; role: string; content: string; reasoning?: ReasoningStep[] }[];
   hasMoreMessages: boolean;
   onVoiceMode?: () => void;
   onNotesUpdated?: (notes: string | null) => void;
   onNoteChange?: () => void;
+}
+
+interface ChatMessage {
+  id: number;
+  role: string;
+  content: string;
+  reasoning?: ReasoningStep[];
 }
 
 interface ImageAttachment {
@@ -26,7 +39,7 @@ interface ImageAttachment {
 }
 
 export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoiceMode, onNotesUpdated, onNoteChange }: ChatPanelProps) {
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -172,7 +185,15 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
 
       try {
         const data = await sendMessage(sessionId, msg);
-        setMessages((prev) => [...prev, { id: synthId(), role: "assistant", content: data.response }]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: synthId(),
+            role: "assistant",
+            content: data.response,
+            reasoning: data.reasoning,
+          },
+        ]);
         if (data.note_changes?.length || data.canvas_changes?.length) {
           onNoteChange?.();
         }
@@ -295,8 +316,25 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
                 }`}
               >
                 {msg.role === "assistant" ? (
-                  <div className="chat-markdown">
-                    <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
+                  <div className="space-y-2">
+                    {msg.reasoning && msg.reasoning.length > 0 && (
+                      <ChainOfThought defaultOpen={false} className="text-xs">
+                        <ChainOfThoughtHeader />
+                        <ChainOfThoughtContent>
+                          {msg.reasoning.map((step, i) => (
+                            <ChainOfThoughtStep
+                              key={`${msg.id}-${i}`}
+                              label={step.label}
+                              description={step.description}
+                              status={step.status ?? "complete"}
+                            />
+                          ))}
+                        </ChainOfThoughtContent>
+                      </ChainOfThought>
+                    )}
+                    <div className="chat-markdown">
+                      <Markdown remarkPlugins={[remarkGfm]}>{msg.content}</Markdown>
+                    </div>
                   </div>
                 ) : (
                   msg.content

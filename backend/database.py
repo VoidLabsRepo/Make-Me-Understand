@@ -81,6 +81,11 @@ async def init_db():
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             )
         """)
+        # Migration: add reasoning column to messages
+        msg_cursor = await db.execute("PRAGMA table_info(messages)")
+        msg_columns = [row[1] for row in await msg_cursor.fetchall()]
+        if "reasoning" not in msg_columns:
+            await db.execute("ALTER TABLE messages ADD COLUMN reasoning TEXT DEFAULT '[]'")
         await db.commit()
 
     # Backup DB: stores deleted sessions for 30 days

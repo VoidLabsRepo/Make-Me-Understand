@@ -13,6 +13,16 @@ from datetime import datetime, timedelta
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
+def _parse_reasoning_field(raw):
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
 def _compress_image(img_bytes: bytes, max_size: int = 1024, quality: int = 80) -> tuple[str, str]:
     """Compress image and return (mime, base64). Max dimension 1024px, JPEG quality 80."""
     img = Image.open(io.BytesIO(img_bytes))
@@ -126,14 +136,19 @@ async def get_session(session_id: int, db: aiosqlite.Connection = Depends(get_db
 
     # Get last 7 messages (most recent); older are loaded via paginated endpoint
     msg_cursor = await db.execute(
-        "SELECT id, role, content FROM messages WHERE session_id = ? "
+        "SELECT id, role, content, reasoning FROM messages WHERE session_id = ? "
         "ORDER BY id DESC LIMIT 7",
         (session_id,),
     )
     desc_rows = await msg_cursor.fetchall()
     # Return in chronological order
     messages = [
-        {"id": r["id"], "role": r["role"], "content": r["content"]}
+        {
+            "id": r["id"],
+            "role": r["role"],
+            "content": r["content"],
+            "reasoning": _parse_reasoning_field(r["reasoning"]),
+        }
         for r in reversed(desc_rows)
     ]
 
@@ -170,19 +185,24 @@ async def list_messages(
     limit = max(1, min(limit, 50))
     if before is not None:
         msg_cursor = await db.execute(
-            "SELECT id, role, content FROM messages "
+            "SELECT id, role, content, reasoning FROM messages "
             "WHERE session_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
             (session_id, before, limit),
         )
     else:
         msg_cursor = await db.execute(
-            "SELECT id, role, content FROM messages "
+            "SELECT id, role, content, reasoning FROM messages "
             "WHERE session_id = ? ORDER BY id DESC LIMIT ?",
             (session_id, limit),
         )
     desc_rows = await msg_cursor.fetchall()
     messages = [
-        {"id": r["id"], "role": r["role"], "content": r["content"]}
+        {
+            "id": r["id"],
+            "role": r["role"],
+            "content": r["content"],
+            "reasoning": _parse_reasoning_field(r["reasoning"]),
+        }
         for r in reversed(desc_rows)
     ]
     has_more = len(desc_rows) == limit

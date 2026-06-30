@@ -54,14 +54,35 @@ export async function getMessages(
   return res.json();
 }
 
-export async function sendMessage(sessionId: number, message: string): Promise<{ response: string; note_changes: NoteChange[]; canvas_changes: CanvasChange[] }> {
-  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  });
-  if (!res.ok) throw new Error("Failed to send message");
-  return res.json();
+export interface ReasoningStep {
+  label: string;
+  description: string;
+  status?: "complete" | "active" | "pending";
+}
+
+export async function sendMessage(
+  sessionId: number,
+  message: string,
+): Promise<{
+  response: string;
+  reasoning: ReasoningStep[];
+  note_changes: NoteChange[];
+  canvas_changes: CanvasChange[];
+}> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error("Failed to send message");
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export interface WordTiming {
@@ -72,19 +93,27 @@ export interface WordTiming {
 
 export interface VoiceResponse {
   response: string;
+  reasoning: ReasoningStep[];
   word_timings: WordTiming[];
   note_changes: NoteChange[];
   canvas_changes: CanvasChange[];
 }
 
 export async function sendVoiceMessage(sessionId: number, message: string): Promise<VoiceResponse> {
-  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/voice-chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
-  });
-  if (!res.ok) throw new Error("Failed to send voice message");
-  return res.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/voice-chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error("Failed to send voice message");
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function generateTTS(sessionId: number, question: string): Promise<Blob> {
