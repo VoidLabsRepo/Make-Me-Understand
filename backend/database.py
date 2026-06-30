@@ -70,6 +70,17 @@ async def init_db():
                 FOREIGN KEY (study_space_id) REFERENCES study_spaces(id) ON DELETE CASCADE
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS canvases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER NOT NULL,
+                title TEXT NOT NULL DEFAULT 'Untitled',
+                elements TEXT NOT NULL DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (session_id) REFERENCES sessions(id)
+            )
+        """)
         await db.commit()
 
     # Backup DB: stores deleted sessions for 30 days

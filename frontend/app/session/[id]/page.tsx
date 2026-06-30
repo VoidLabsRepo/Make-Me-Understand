@@ -6,11 +6,15 @@ import { motion, AnimatePresence } from "motion/react";
 import { getSession, type Session } from "@/lib/api";
 import { ChatPanel } from "@/components/chat-panel";
 import { NotesPanel } from "@/components/notes-panel";
+import { CanvasPanel } from "@/components/canvas-panel";
 import { VoiceMode } from "@/components/voice-mode";
 import { MatrixLoader } from "@/components/matrix-loader";
 import { SidebarToggleIcon } from "@/components/unlumen-ui/sidebar-toggle-icon";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FileText, LayoutGrid } from "lucide-react";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
+
+type SidebarTab = "notes" | "canvas";
 
 const panelVariants = {
   hidden: {
@@ -87,7 +91,56 @@ const contentVariants = {
   },
 };
 
-function MobileNotesPanel({ sessionId, refreshTrigger, onClose }: { sessionId: number; refreshTrigger?: number; onClose: () => void }) {
+function TabSwitcher({
+  activeTab,
+  onChange,
+}: {
+  activeTab: SidebarTab;
+  onChange: (tab: SidebarTab) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => onChange("notes")}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors",
+          activeTab === "notes"
+            ? "bg-muted text-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <FileText size={12} />
+        Notes
+      </button>
+      <button
+        onClick={() => onChange("canvas")}
+        className={cn(
+          "flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors",
+          activeTab === "canvas"
+            ? "bg-muted text-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <LayoutGrid size={12} />
+        Canvas
+      </button>
+    </div>
+  );
+}
+
+function MobileSidePanel({
+  sessionId,
+  refreshTrigger,
+  activeTab,
+  onTabChange,
+  onClose,
+}: {
+  sessionId: number;
+  refreshTrigger?: number;
+  activeTab: SidebarTab;
+  onTabChange: (tab: SidebarTab) => void;
+  onClose: () => void;
+}) {
   return (
     <>
       <motion.div
@@ -104,19 +157,55 @@ function MobileNotesPanel({ sessionId, refreshTrigger, onClose }: { sessionId: n
         exit="exit"
         className="fixed inset-x-0 bottom-0 top-12 bg-white rounded-t-2xl border-t overflow-hidden flex flex-col z-50"
       >
-        <div className="px-5 py-4 border-b flex items-center justify-between">
-          <h2 className="text-base font-medium text-muted-foreground">Notes</h2>
+        <div className="px-5 py-4 border-b flex items-center justify-between gap-2">
+          <TabSwitcher activeTab={activeTab} onChange={onTabChange} />
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <SidebarToggleIcon isOpen={true} className="size-5" />
           </button>
         </div>
-        <NotesPanel sessionId={sessionId} refreshTrigger={refreshTrigger} />
+        <AnimatePresence mode="wait">
+          {activeTab === "notes" ? (
+            <motion.div
+              key="notes"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex-1 min-h-0"
+            >
+              <NotesPanel sessionId={sessionId} refreshTrigger={refreshTrigger} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="canvas"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex-1 min-h-0"
+            >
+              <CanvasPanel sessionId={sessionId} refreshTrigger={refreshTrigger} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.aside>
     </>
   );
 }
 
-function DesktopNotesPanel({ sessionId, refreshTrigger, delay = 0 }: { sessionId: number; refreshTrigger?: number; delay?: number }) {
+function DesktopSidePanel({
+  sessionId,
+  refreshTrigger,
+  activeTab,
+  onTabChange,
+  delay = 0,
+}: {
+  sessionId: number;
+  refreshTrigger?: number;
+  activeTab: SidebarTab;
+  onTabChange: (tab: SidebarTab) => void;
+  delay?: number;
+}) {
   return (
     <motion.aside
       variants={panelVariants}
@@ -133,10 +222,34 @@ function DesktopNotesPanel({ sessionId, refreshTrigger, delay = 0 }: { sessionId
         transition={{ delay }}
         className="h-full flex flex-col"
       >
-        <div className="px-5 py-4 border-b">
-          <h2 className="text-base font-medium text-muted-foreground">Notes</h2>
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <TabSwitcher activeTab={activeTab} onChange={onTabChange} />
         </div>
-        <NotesPanel sessionId={sessionId} refreshTrigger={refreshTrigger} />
+        <AnimatePresence mode="wait">
+          {activeTab === "notes" ? (
+            <motion.div
+              key="notes"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex-1 min-h-0"
+            >
+              <NotesPanel sessionId={sessionId} refreshTrigger={refreshTrigger} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="canvas"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex-1 min-h-0"
+            >
+              <CanvasPanel sessionId={sessionId} refreshTrigger={refreshTrigger} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </motion.aside>
   );
@@ -158,8 +271,9 @@ export default function SessionPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(true);
-  const [notesRefresh, setNotesRefresh] = useState(0);
+  const [sidePanelOpen, setSidePanelOpen] = useState(true);
+  const [activeTab, setActiveTab] = useState<SidebarTab>("notes");
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -170,14 +284,14 @@ export default function SessionPage() {
       .catch(() => router.push("/"));
   }, [params.id, router]);
 
-  const closeNotes = useCallback(() => setNotesOpen(false), []);
+  const closeSidePanel = useCallback(() => setSidePanelOpen(false), []);
 
-  const handleNoteChange = useCallback(() => {
-    setNotesRefresh((n) => n + 1);
+  const handleRefresh = useCallback(() => {
+    setRefreshTrigger((n) => n + 1);
   }, []);
 
   const handleNotesUpdated = useCallback((notes: string | null) => {
-    setSession((prev) => prev ? { ...prev, notes } : prev);
+    setSession((prev) => (prev ? { ...prev, notes } : prev));
   }, []);
 
   if (!session) {
@@ -197,22 +311,38 @@ export default function SessionPage() {
           </Link>
           <div className="flex-1" />
           <button
-            onClick={() => setNotesOpen(!notesOpen)}
+            onClick={() => setSidePanelOpen(!sidePanelOpen)}
             className="text-muted-foreground hover:text-foreground transition-colors"
           >
-            <SidebarToggleIcon isOpen={notesOpen} className="size-6" />
+            <SidebarToggleIcon isOpen={sidePanelOpen} className="size-6" />
           </button>
         </header>
         <div className="flex-1 flex gap-3 md:gap-5 overflow-hidden px-3 md:px-5 pb-3 md:pb-5">
           <div className="flex-1 min-w-0">
-            <VoiceMode sessionId={session.id} notes={session.notes || ""} onClose={() => setVoiceMode(false)} onNoteChange={handleNoteChange} />
+            <VoiceMode
+              sessionId={session.id}
+              notes={session.notes || ""}
+              onClose={() => setVoiceMode(false)}
+              onNoteChange={handleRefresh}
+            />
           </div>
           <AnimatePresence mode="popLayout">
-            {notesOpen && (
+            {sidePanelOpen && (
               isMobile ? (
-                <MobileNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} onClose={closeNotes} />
+                <MobileSidePanel
+                  sessionId={session.id}
+                  refreshTrigger={refreshTrigger}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                  onClose={closeSidePanel}
+                />
               ) : (
-                <DesktopNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} />
+                <DesktopSidePanel
+                  sessionId={session.id}
+                  refreshTrigger={refreshTrigger}
+                  activeTab={activeTab}
+                  onTabChange={setActiveTab}
+                />
               )
             )}
           </AnimatePresence>
@@ -229,19 +359,18 @@ export default function SessionPage() {
         </Link>
         <div className="flex-1" />
         <button
-          onClick={() => setNotesOpen(!notesOpen)}
+          onClick={() => setSidePanelOpen(!sidePanelOpen)}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
-          <SidebarToggleIcon isOpen={notesOpen} className="size-6" />
+          <SidebarToggleIcon isOpen={sidePanelOpen} className="size-6" />
         </button>
       </header>
 
       <div className="flex-1 flex gap-3 md:gap-5 overflow-hidden px-3 md:px-5 pb-3 md:pb-5">
-        {/* Chat area */}
         <motion.div
           layout
           variants={chatVariants}
-          animate={notesOpen && !isMobile ? "wide" : "full"}
+          animate={sidePanelOpen && !isMobile ? "wide" : "full"}
           className="min-w-0 min-h-0 bg-white rounded-2xl border overflow-hidden flex flex-col"
         >
           <ChatPanel
@@ -249,17 +378,27 @@ export default function SessionPage() {
             initialMessages={session.messages || []}
             onVoiceMode={() => setVoiceMode(true)}
             onNotesUpdated={handleNotesUpdated}
-            onNoteChange={handleNoteChange}
+            onNoteChange={handleRefresh}
           />
         </motion.div>
 
-        {/* Notes panel */}
         <AnimatePresence mode="popLayout">
-          {notesOpen && (
+          {sidePanelOpen && (
             isMobile ? (
-              <MobileNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} onClose={closeNotes} />
+              <MobileSidePanel
+                sessionId={session.id}
+                refreshTrigger={refreshTrigger}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                onClose={closeSidePanel}
+              />
             ) : (
-              <DesktopNotesPanel sessionId={session.id} refreshTrigger={notesRefresh} />
+              <DesktopSidePanel
+                sessionId={session.id}
+                refreshTrigger={refreshTrigger}
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+              />
             )
           )}
         </AnimatePresence>

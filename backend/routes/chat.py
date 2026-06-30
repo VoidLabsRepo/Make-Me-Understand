@@ -35,7 +35,8 @@ def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
         raw = m.group(1).strip()
         try:
             data = json.loads(raw)
-            if data.get("tool") == "note":
+            tool = data.get("tool")
+            if tool == "note":
                 action = data.get("action")
                 if action == "create":
                     tool_calls.append({
@@ -58,6 +59,33 @@ def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
                             "action": "delete_note",
                             "note_id": note_id,
                         })
+            elif tool == "canvas":
+                action = data.get("action")
+                if action == "create":
+                    tool_calls.append({
+                        "action": "create_canvas",
+                        "title": data.get("title", "Untitled"),
+                        "elements": data.get("elements", []),
+                    })
+                elif action == "update":
+                    canvas_id = data.get("id")
+                    if canvas_id and isinstance(canvas_id, int):
+                        update_kwargs: dict = {"canvas_id": canvas_id}
+                        if "title" in data:
+                            update_kwargs["title"] = data["title"]
+                        if "elements" in data:
+                            update_kwargs["elements"] = data["elements"]
+                        tool_calls.append({
+                            "action": "update_canvas",
+                            **update_kwargs,
+                        })
+                elif action == "delete":
+                    canvas_id = data.get("id")
+                    if canvas_id and isinstance(canvas_id, int):
+                        tool_calls.append({
+                            "action": "delete_canvas",
+                            "canvas_id": canvas_id,
+                        })
         except (json.JSONDecodeError, TypeError):
             pass
         # Remove the matched block from response
@@ -65,9 +93,10 @@ def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
     return clean_response.strip(), tool_calls
 
 
-async def _execute_tool_calls(db: aiosqlite.Connection, session_id: int, tool_calls: list[dict]) -> list[dict]:
-    """Execute note tool calls and return results."""
-    results = []
+async def _execute_tool_calls(db: aiosqlite.Connection, session_id: int, tool_calls: list[dict]) -> dict:
+    """Execute note + canvas tool calls. Returns {note_changes, canvas_changes}."""
+    note_changes: list[dict] = []
+    canvas_changes: list[dict] = []
     for tc in tool_calls:
         action = tc["action"]
         if action == "create_note":
@@ -76,22 +105,59 @@ async def _execute_tool_calls(db: aiosqlite.Connection, session_id: int, tool_ca
                 (session_id, tc["title"], tc["content"]),
             )
             await db.commit()
-            results.append({"action": "created", "note_id": cursor.lastrowid, "title": tc["title"]})
+            note_changes.append({"action": "created", "note_id": cursor.lastrowid, "title": tc["title"]})
         elif action == "update_note":
             await db.execute(
                 "UPDATE notes SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND session_id = ?",
                 (tc["content"], tc["note_id"], session_id),
             )
             await db.commit()
-            results.append({"action": "updated", "note_id": tc["note_id"]})
+            note_changes.append({"action": "updated", "note_id": tc["note_id"]})
         elif action == "delete_note":
             await db.execute(
                 "DELETE FROM notes WHERE id = ? AND session_id = ?",
                 (tc["note_id"], session_id),
             )
             await db.commit()
-            results.append({"action": "deleted", "note_id": tc["note_id"]})
-    return results
+            note_changes.append({"action": "deleted", "note_id": tc["note_id"]})
+        elif action == "create_canvas":
+            elements_json = json.dumps(tc["elements"])
+            cursor = await db.execute(
+                "INSERT INTO canvases (session_id, title, elements) VALUES (?, ?, ?)",
+                (session_id, tc["title"], elements_json),
+            )
+            await db.commit()
+            canvas_changes.append({
+                "action": "created",
+                "canvas_id": cursor.lastrowid,
+                "title": tc["title"],
+            })
+        elif action == "update_canvas":
+            updates = []
+            params: list = []
+            if "title" in tc:
+                updates.append("title = ?")
+                params.append(tc["title"])
+            if "elements" in tc:
+                updates.append("elements = ?")
+                params.append(json.dumps(tc["elements"]))
+            if updates:
+                updates.append("updated_at = CURRENT_TIMESTAMP")
+                params.append(tc["canvas_id"])
+                await db.execute(
+                    f"UPDATE canvases SET {', '.join(updates)} WHERE id = ? AND session_id = ?",
+                    [*params, session_id],
+                )
+                await db.commit()
+            canvas_changes.append({"action": "updated", "canvas_id": tc["canvas_id"]})
+        elif action == "delete_canvas":
+            await db.execute(
+                "DELETE FROM canvases WHERE id = ? AND session_id = ?",
+                (tc["canvas_id"], session_id),
+            )
+            await db.commit()
+            canvas_changes.append({"action": "deleted", "canvas_id": tc["canvas_id"]})
+    return {"note_changes": note_changes, "canvas_changes": canvas_changes}
 
 
 @router.post("/{session_id}/chat")
@@ -152,7 +218,9 @@ async def chat(
 
     # Parse and execute tool calls
     clean_response, tool_calls = _parse_tool_calls(response)
-    note_changes = await _execute_tool_calls(db, session_id, tool_calls)
+    tool_results = await _execute_tool_calls(db, session_id, tool_calls)
+    note_changes = tool_results["note_changes"]
+    canvas_changes = tool_results["canvas_changes"]
 
     # Save clean AI response (without tool call lines)
     await db.execute(
@@ -182,7 +250,7 @@ async def chat(
             except Exception:
                 pass  # title generation is best-effort
 
-    return {"response": clean_response, "note_changes": note_changes}
+    return {"response": clean_response, "note_changes": note_changes, "canvas_changes": canvas_changes}
 
 
 @router.post("/{session_id}/voice-chat")
@@ -241,18 +309,21 @@ async def voice_chat(
         images=images if images else None,
     )
 
-    # Parse and execute note tool calls before cleaning text
+    # Parse and execute note + canvas tool calls before cleaning text
     clean_response, tool_calls = _parse_tool_calls(raw_response)
-    note_changes = await _execute_tool_calls(db, session_id, tool_calls)
+    tool_results = await _execute_tool_calls(db, session_id, tool_calls)
+    note_changes = tool_results["note_changes"]
+    canvas_changes = tool_results["canvas_changes"]
 
     # Strip any remaining formatting from the spoken part
     response = clean_voice_text(clean_response)
 
     # If text is empty after cleaning (LLM put everything in code blocks),
-    # fall back to a natural confirmation if notes were changed, or a generic one
+    # fall back to a natural confirmation if any tool ran, or a generic one
     if not response or len(response.strip()) < 3:
-        if note_changes:
-            actions = [nc["action"].replace("_", " ") for nc in note_changes]
+        changes = note_changes or canvas_changes
+        if changes:
+            actions = [nc["action"].replace("_", " ") for nc in changes]
             response = f"Done! I've {actions[0]} for you."
         else:
             response = "I'm not sure what to say. Could you repeat that?"
@@ -293,7 +364,7 @@ async def voice_chat(
             except Exception:
                 pass
 
-    return {"response": response, "word_timings": timings, "note_changes": note_changes}
+    return {"response": response, "word_timings": timings, "note_changes": note_changes, "canvas_changes": canvas_changes}
 
 
 class TTSRequest(BaseModel):

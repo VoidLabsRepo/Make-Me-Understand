@@ -106,14 +106,14 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
       setWordTimings([]);
 
       // 1. Fetch LLM response first to get subtitle text & save chat messages
-      const { response: responseText, word_timings, note_changes } = await sendVoiceMessage(sessionId, question);
+      const { response: responseText, word_timings, note_changes, canvas_changes } = await sendVoiceMessage(sessionId, question);
       if (controller.signal.aborted) return;
 
       setAiSubtitle(responseText);
       setWordTimings(word_timings);
 
-      // Notify parent if notes were changed
-      if (note_changes?.length) {
+      // Notify parent if notes or canvases were changed
+      if (note_changes?.length || canvas_changes?.length) {
         onNoteChange?.();
       }
 

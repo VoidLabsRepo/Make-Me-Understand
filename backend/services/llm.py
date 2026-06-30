@@ -186,7 +186,38 @@ async def chat_with_context(notes: str, history: list[dict], user_message: str, 
             "- IMPORTANT: The JSON must be valid and inside a ```json code block\n"
             "- IMPORTANT: The note content MUST be formatted with markdown — use headers (#, ##, ###), bullet points, bold, etc.\n"
             "- IMPORTANT: When the user asks you to write, create, or save notes, you MUST output the JSON tool call. Do NOT just describe what you would write — actually write it in the tool call.\n"
-            "- IMPORTANT: When you create or update a note via tool call, your response text should be SHORT — just confirm what you did. Do NOT repeat the note content in your response. Example: 'Done! I've created a note called \"Phase 1 Summary\" with your key points.'\n"
+            "- IMPORTANT: When you create or update a note via tool call, your response text should be SHORT — just confirm what you did. Do NOT repeat the note content in your response. Example: 'Done! I've created a note called \"Phase 1 Summary\" with your key points.'\n\n"
+            "## Canvas Management\n"
+            "You also have a Canvas tool. The Canvas is a visual board where you place COLORED RECTANGLES "
+            "(one per concept) instead of writing long text. Each rectangle is a separate element with its own color. "
+            "Use the Canvas when the student asks to visualize, draw, map out, or create a study board. "
+            "ONLY create canvases when the user EXPLICITLY asks for one (e.g. 'make a canvas', 'visualize this', 'draw a map', 'create a flowchart', 'show me a diagram').\n\n"
+            "Element types and their auto-assigned colors:\n"
+            "- \"definition\" — Blue. For definitions of key terms.\n"
+            "- \"formula\" — Green. For mathematical formulas or equations.\n"
+            "- \"flowchart\" — Orange. For process steps in a workflow.\n"
+            "- \"note\" — Purple. For general notes, important points, or takeaways.\n"
+            "- \"example\" — Pink. For worked examples or illustrations.\n"
+            "- \"heading\" — Gray. For section titles or category headers.\n\n"
+            "Canvas tool call format:\n\n"
+            '```json\n{"tool":"canvas","action":"create","title":"Supply & Demand","elements":['
+            '{"id":"e1","type":"definition","label":"Supply","content":"The quantity of a good producers are willing to sell at a given price.","position":{"x":0,"y":0},"size":{"width":260,"height":120},'
+            '"connections":["e3"]},'
+            '{"id":"e2","type":"definition","label":"Demand","content":"The quantity of a good consumers are willing to buy at a given price.","position":{"x":320,"y":0},"size":{"width":260,"height":120},'
+            '"connections":["e3"]},'
+            '{"id":"e3","type":"flowchart","label":"Equilibrium","content":"The price at which supply and demand are equal.","position":{"x":160,"y":180},"size":{"width":260,"height":120}}]}\n```\n\n'
+            "Update format:\n"
+            '```json\n{"tool":"canvas","action":"update","id":7,"title":"Optional new title","elements":[...full new elements array...]}\n```\n\n'
+            "Delete format:\n"
+            '```json\n{"tool":"canvas","action":"delete","id":7}\n```\n\n'
+            "Canvas rules:\n"
+            "- Each element needs a unique `id` (e.g. \"e1\", \"e2\").\n"
+            "- Position elements in a clean grid: x in steps of 280, y in steps of 160.\n"
+            "- `size` should be reasonable: width 240-320, height 100-160.\n"
+            "- `connections` lists ids of elements this element points to (used for flowchart arrows).\n"
+            "- When updating, send the FULL elements array — it replaces the old one.\n"
+            "- When creating, write a SHORT response confirming what you built. Do NOT repeat the element content in your response text.\n"
+            "- Pull canvas content from the study material notes, not from your own invention.\n"
         )
 
     messages = [
@@ -354,6 +385,32 @@ async def voice_chat_with_context(notes: str, history: list[dict], user_message:
         "This applies to BOTH voice mode and chat mode. The note content is always markdown, even when your spoken words are plain text.\n"
         "- Your spoken response should be SHORT when creating notes — just confirm.\n"
         "- Do NOT repeat the note content in your spoken words.\n"
+        "- The JSON must be valid and inside a ```json code block\n\n"
+        "# Canvas Creation\n"
+        "You also have a Canvas tool. The Canvas is a visual board with COLORED RECTANGLES "
+        "(one per concept) instead of long text. Use it when the student says 'make a canvas', 'visualize this', 'draw a map', 'create a flowchart', 'show me a diagram'.\n"
+        "ONLY create canvases when the student EXPLICITLY asks for one. Do NOT create a canvas just because you explained something.\n\n"
+        "Element types and their auto-assigned colors:\n"
+        "- \"definition\" — Blue. For definitions of key terms.\n"
+        "- \"formula\" — Green. For mathematical formulas or equations.\n"
+        "- \"flowchart\" — Orange. For process steps.\n"
+        "- \"note\" — Purple. For general notes or takeaways.\n"
+        "- \"example\" — Pink. For worked examples.\n"
+        "- \"heading\" — Gray. For section titles.\n\n"
+        "Canvas tool call format:\n\n"
+        '```json\n{"tool":"canvas","action":"create","title":"Board Title","elements":['
+        '{"id":"e1","type":"definition","label":"Term","content":"The definition.","position":{"x":0,"y":0},"size":{"width":260,"height":120}}]}\n```\n\n'
+        "Update format:\n"
+        '```json\n{"tool":"canvas","action":"update","id":7,"elements":[...full new elements...]}\n```\n\n'
+        "Delete format:\n"
+        '```json\n{"tool":"canvas","action":"delete","id":7}\n```\n\n'
+        "Canvas rules:\n"
+        "- Each element needs a unique `id` (e.g. \"e1\").\n"
+        "- Position in a clean grid: x in steps of 280, y in steps of 160.\n"
+        "- `size` should be reasonable: width 240-320, height 100-160.\n"
+        "- `connections` lists ids of elements this element points to.\n"
+        "- When updating, send the FULL elements array — it replaces the old one.\n"
+        "- Your spoken response should be SHORT when creating a canvas — just confirm what you built.\n"
         "- The JSON must be valid and inside a ```json code block\n\n"
 
         f"--- Study Material Notes ---\n{notes}\n\n"

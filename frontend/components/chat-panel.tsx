@@ -127,7 +127,7 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
       try {
         const data = await sendMessage(sessionId, msg);
         setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
-        if (data.note_changes?.length) {
+        if (data.note_changes?.length || data.canvas_changes?.length) {
           onNoteChange?.();
         }
       } catch {

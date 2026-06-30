@@ -39,7 +39,7 @@ export async function getSession(id: number): Promise<Session> {
   return res.json();
 }
 
-export async function sendMessage(sessionId: number, message: string): Promise<{ response: string; note_changes: NoteChange[] }> {
+export async function sendMessage(sessionId: number, message: string): Promise<{ response: string; note_changes: NoteChange[]; canvas_changes: CanvasChange[] }> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -59,6 +59,7 @@ export interface VoiceResponse {
   response: string;
   word_timings: WordTiming[];
   note_changes: NoteChange[];
+  canvas_changes: CanvasChange[];
 }
 
 export async function sendVoiceMessage(sessionId: number, message: string): Promise<VoiceResponse> {
@@ -178,6 +179,67 @@ export async function deleteNote(noteId: number): Promise<void> {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete note");
+}
+
+// Canvas
+
+export type CanvasElementType = "definition" | "formula" | "flowchart" | "note" | "example" | "heading";
+
+export interface CanvasElement {
+  id: string;
+  type: CanvasElementType;
+  label: string;
+  content: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  connections?: string[];
+}
+
+export interface Canvas {
+  id: number;
+  session_id: number;
+  title: string;
+  elements: CanvasElement[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CanvasChange {
+  action: "created" | "updated" | "deleted";
+  canvas_id: number;
+  title?: string;
+}
+
+export async function listCanvases(sessionId: number): Promise<Canvas[]> {
+  const res = await fetch(`${API_BASE}/api/canvases/session/${sessionId}`);
+  if (!res.ok) throw new Error("Failed to list canvases");
+  return res.json();
+}
+
+export async function createCanvas(sessionId: number, title: string, elements: CanvasElement[]): Promise<Canvas> {
+  const res = await fetch(`${API_BASE}/api/canvases`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, title, elements }),
+  });
+  if (!res.ok) throw new Error("Failed to create canvas");
+  return res.json();
+}
+
+export async function updateCanvas(canvasId: number, data: { title?: string; elements?: CanvasElement[] }): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update canvas");
+}
+
+export async function deleteCanvas(canvasId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete canvas");
 }
 
 // Study Spaces
