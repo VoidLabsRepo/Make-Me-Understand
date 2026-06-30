@@ -16,6 +16,7 @@ import {
   StickyNote,
   Lightbulb,
   Heading2,
+  ArrowDown,
   type LucideIcon,
 } from "lucide-react";
 import type { CanvasElementType } from "@/lib/api";
@@ -81,12 +82,46 @@ const TYPE_STYLES: Record<
   },
 };
 
+function parseFlowSteps(content: string): string[] {
+  const lines = content.split("\n").filter((l) => l.trim());
+  const steps: string[] = [];
+  for (const line of lines) {
+    const m = line.match(/^\d+[.)]\s*(.+)/);
+    if (m) steps.push(m[1].trim());
+  }
+  return steps.length >= 2 ? steps : [];
+}
+
+function FlowchartSteps({ steps, textClass }: { steps: string[]; textClass: string }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 py-1">
+      {steps.map((step, i) => (
+        <div key={i} className="flex flex-col items-center w-full">
+          <div
+            className={cn(
+              "w-full text-center px-2 py-1 rounded text-[11px] font-medium border border-current/20 bg-white/60",
+              textClass,
+            )}
+          >
+            {step}
+          </div>
+          {i < steps.length - 1 && (
+            <ArrowDown size={12} className={cn("my-0.5 shrink-0", textClass, "opacity-60")} />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export const CanvasNode = memo(({ data, selected }: NodeProps) => {
   const d = data as CanvasNodeData;
   const style = TYPE_STYLES[d.type] ?? TYPE_STYLES.note;
   const Icon = style.icon;
 
   const isHeading = d.type === "heading";
+  const isFlowchart = d.type === "flowchart";
+  const flowSteps = isFlowchart ? parseFlowSteps(d.content) : [];
 
   return (
     <BaseNode
@@ -117,9 +152,13 @@ export const CanvasNode = memo(({ data, selected }: NodeProps) => {
       </BaseNodeHeaderTitle>
       {!isHeading && (
         <BaseNodeContent className="px-3 pb-3 pt-1">
-          <p className={cn("text-xs leading-relaxed whitespace-pre-wrap break-words", style.text, "opacity-90")}>
-            {d.content}
-          </p>
+          {isFlowchart && flowSteps.length >= 2 ? (
+            <FlowchartSteps steps={flowSteps} textClass={style.text} />
+          ) : (
+            <p className={cn("text-xs leading-relaxed whitespace-pre-wrap break-words", style.text, "opacity-90")}>
+              {d.content}
+            </p>
+          )}
         </BaseNodeContent>
       )}
       <Handle

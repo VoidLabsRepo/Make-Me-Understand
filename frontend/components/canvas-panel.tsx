@@ -223,7 +223,7 @@ function CanvasView({ elements }: { elements: CanvasElement[] }) {
         content: el.content,
         type: el.type,
       },
-      ...(el.size ? { width: el.size.width, height: el.size.height } : {}),
+      ...(el.size ? { width: el.size.width, ...(el.type !== "flowchart" ? { height: el.size.height } : {}) } : {}),
     }));
     const edgeSet = new Set<string>();
     const edges: Edge[] = [];
