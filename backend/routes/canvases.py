@@ -30,7 +30,7 @@ def _parse_elements(raw: str) -> list:
 @router.get("/session/{session_id}")
 async def list_canvases(session_id: int, db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute(
-        "SELECT id, session_id, title, elements, created_at, updated_at "
+        "SELECT id, session_id, title, created_at, updated_at "
         "FROM canvases WHERE session_id = ? ORDER BY created_at ASC",
         (session_id,),
     )
@@ -40,12 +40,31 @@ async def list_canvases(session_id: int, db: aiosqlite.Connection = Depends(get_
             "id": r["id"],
             "session_id": r["session_id"],
             "title": r["title"],
-            "elements": _parse_elements(r["elements"]),
             "created_at": r["created_at"],
             "updated_at": r["updated_at"],
         }
         for r in rows
     ]
+
+
+@router.get("/{canvas_id}")
+async def get_canvas(canvas_id: int, db: aiosqlite.Connection = Depends(get_db)):
+    cursor = await db.execute(
+        "SELECT id, session_id, title, elements, created_at, updated_at "
+        "FROM canvases WHERE id = ?",
+        (canvas_id,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Canvas not found")
+    return {
+        "id": row["id"],
+        "session_id": row["session_id"],
+        "title": row["title"],
+        "elements": _parse_elements(row["elements"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
 
 
 @router.post("")

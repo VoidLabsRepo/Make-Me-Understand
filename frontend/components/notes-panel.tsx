@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion } from "motion/react";
 import { bounce } from "@/lib/animations";
-import { Plus, X, FileText } from "lucide-react";
+import { Plus, X, FileText, Loader2 } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { listNotes, createNote, updateNote, deleteNote, type Note } from "@/lib/api";
+import { listNotes, getNote, createNote, updateNote, deleteNote, type Note } from "@/lib/api";
 
 interface NotesPanelProps {
   sessionId: number;
@@ -21,11 +21,21 @@ export function NotesPanel({ sessionId, refreshTrigger, isMobile, onClose }: Not
   const [editing, setEditing] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
   const [loading, setLoading] = useState(true);
+  const [activeContentLoading, setActiveContentLoading] = useState(false);
+  const loadedContentRef = useRef<Set<number>>(new Set());
 
   const fetchNotes = useCallback(async () => {
     try {
       const data = await listNotes(sessionId);
-      setNotes(data);
+      setNotes((prev) => {
+        const byId = new Map(prev.map((n) => [n.id, n]));
+        return data.map((n) => {
+          const existing = byId.get(n.id);
+          return existing && existing.content !== undefined
+            ? { ...n, content: existing.content }
+            : n;
+        });
+      });
       if (data.length > 0 && !data.find((n) => n.id === activeId)) {
         setActiveId(data[0].id);
       }
@@ -48,6 +58,31 @@ export function NotesPanel({ sessionId, refreshTrigger, isMobile, onClose }: Not
   }, [refreshTrigger, fetchNotes]);
 
   const activeNote = notes.find((n) => n.id === activeId);
+
+  // Lazy-load content for the active note if missing
+  useEffect(() => {
+    if (!activeNote || activeNote.content !== undefined || loadedContentRef.current.has(activeNote.id)) {
+      return;
+    }
+    loadedContentRef.current.add(activeNote.id);
+    setActiveContentLoading(true);
+    getNote(activeNote.id)
+      .then((full) => {
+        setNotes((prev) => prev.map((n) => (n.id === full.id ? { ...n, content: full.content } : n)));
+      })
+      .catch(() => {
+        loadedContentRef.current.delete(activeNote.id);
+      })
+      .finally(() => setActiveContentLoading(false));
+  }, [activeNote]);
+
+  // When a note is deleted or unselected, evict its content from the cache
+  useEffect(() => {
+    const liveIds = new Set(notes.map((n) => n.id));
+    for (const id of loadedContentRef.current) {
+      if (!liveIds.has(id)) loadedContentRef.current.delete(id);
+    }
+  }, [notes]);
 
   const handleAdd = async () => {
     try {
@@ -181,12 +216,17 @@ export function NotesPanel({ sessionId, refreshTrigger, isMobile, onClose }: Not
           ) : (
             <div
               onDoubleClick={() => {
+                if (activeNote.content === undefined) return;
                 setEditing(activeNote.id);
                 setEditContent(activeNote.content);
               }}
               className="cursor-text min-h-full"
             >
-              {activeNote.content ? (
+              {activeContentLoading || activeNote.content === undefined ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <Loader2 size={16} className="animate-spin" />
+                </div>
+              ) : activeNote.content ? (
                 <div className="text-sm leading-relaxed
                   [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mt-6 [&_h1]:mb-2
                   [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h2]:border-b [&_h2]:pb-1 [&_h2]:border-muted

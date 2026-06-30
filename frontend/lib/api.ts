@@ -6,7 +6,9 @@ export interface Session {
   notes: string | null;
   image_context: string;
   created_at: string;
-  messages: { role: string; content: string }[];
+  messages: { id: number; role: string; content: string }[];
+  has_more_messages: boolean;
+  total_messages: number;
 }
 
 export interface SessionListItem {
@@ -36,6 +38,19 @@ export async function listSessions(): Promise<SessionListItem[]> {
 export async function getSession(id: number): Promise<Session> {
   const res = await fetch(`${API_BASE}/api/sessions/${id}`);
   if (!res.ok) throw new Error("Failed to get session");
+  return res.json();
+}
+
+export async function getMessages(
+  sessionId: number,
+  beforeId?: number,
+  limit: number = 7,
+): Promise<{ messages: { id: number; role: string; content: string }[]; has_more: boolean }> {
+  const params = new URLSearchParams();
+  if (beforeId != null) params.set("before", String(beforeId));
+  params.set("limit", String(limit));
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages?${params}`);
+  if (!res.ok) throw new Error("Failed to get messages");
   return res.json();
 }
 
@@ -138,7 +153,7 @@ export interface Note {
   id: number;
   session_id: number;
   title: string;
-  content: string;
+  content?: string;
   created_at: string;
   updated_at: string;
 }
@@ -152,6 +167,12 @@ export interface NoteChange {
 export async function listNotes(sessionId: number): Promise<Note[]> {
   const res = await fetch(`${API_BASE}/api/notes/session/${sessionId}`);
   if (!res.ok) throw new Error("Failed to list notes");
+  return res.json();
+}
+
+export async function getNote(noteId: number): Promise<Note> {
+  const res = await fetch(`${API_BASE}/api/notes/${noteId}`);
+  if (!res.ok) throw new Error("Failed to get note");
   return res.json();
 }
 
@@ -199,7 +220,7 @@ export interface Canvas {
   id: number;
   session_id: number;
   title: string;
-  elements: CanvasElement[];
+  elements?: CanvasElement[];
   created_at: string;
   updated_at: string;
 }
@@ -213,6 +234,12 @@ export interface CanvasChange {
 export async function listCanvases(sessionId: number): Promise<Canvas[]> {
   const res = await fetch(`${API_BASE}/api/canvases/session/${sessionId}`);
   if (!res.ok) throw new Error("Failed to list canvases");
+  return res.json();
+}
+
+export async function getCanvas(canvasId: number): Promise<Canvas> {
+  const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`);
+  if (!res.ok) throw new Error("Failed to get canvas");
   return res.json();
 }
 

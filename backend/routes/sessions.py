@@ -124,12 +124,28 @@ async def get_session(session_id: int, db: aiosqlite.Connection = Depends(get_db
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Get chat history
+    # Get last 7 messages (most recent); older are loaded via paginated endpoint
     msg_cursor = await db.execute(
-        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at",
+        "SELECT id, role, content FROM messages WHERE session_id = ? "
+        "ORDER BY id DESC LIMIT 7",
         (session_id,),
     )
-    messages = [{"role": r["role"], "content": r["content"]} for r in await msg_cursor.fetchall()]
+    desc_rows = await msg_cursor.fetchall()
+    # Return in chronological order
+    messages = [
+        {"id": r["id"], "role": r["role"], "content": r["content"]}
+        for r in reversed(desc_rows)
+    ]
+
+    # Whether older messages exist beyond this window
+    count_cursor = await db.execute(
+        "SELECT COUNT(*) as cnt, MIN(id) as min_id FROM messages WHERE session_id = ?",
+        (session_id,),
+    )
+    count_row = await count_cursor.fetchone()
+    total = count_row["cnt"] or 0
+    oldest_id = messages[0]["id"] if messages else None
+    has_more = total > len(messages) and oldest_id is not None and count_row["min_id"] < oldest_id
 
     return {
         "id": row["id"],
@@ -138,7 +154,39 @@ async def get_session(session_id: int, db: aiosqlite.Connection = Depends(get_db
         "image_context": row["image_context"] or "",
         "created_at": row["created_at"],
         "messages": messages,
+        "has_more_messages": has_more,
+        "total_messages": total,
     }
+
+
+@router.get("/{session_id}/messages")
+async def list_messages(
+    session_id: int,
+    before: int | None = None,
+    limit: int = 7,
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    """Load older messages before a given message id (paged)."""
+    limit = max(1, min(limit, 50))
+    if before is not None:
+        msg_cursor = await db.execute(
+            "SELECT id, role, content FROM messages "
+            "WHERE session_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
+            (session_id, before, limit),
+        )
+    else:
+        msg_cursor = await db.execute(
+            "SELECT id, role, content FROM messages "
+            "WHERE session_id = ? ORDER BY id DESC LIMIT ?",
+            (session_id, limit),
+        )
+    desc_rows = await msg_cursor.fetchall()
+    messages = [
+        {"id": r["id"], "role": r["role"], "content": r["content"]}
+        for r in reversed(desc_rows)
+    ]
+    has_more = len(desc_rows) == limit
+    return {"messages": messages, "has_more": has_more}
 
 
 class RenameRequest(BaseModel):

@@ -5,7 +5,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { motion, AnimatePresence } from "motion/react";
 import { bounce } from "@/lib/animations";
-import { sendMessage, appendImages } from "@/lib/api";
+import { sendMessage, appendImages, getMessages } from "@/lib/api";
 import { Persona } from "@/components/ai-elements/persona";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
@@ -13,7 +13,8 @@ import { Plus, Send, Paperclip, Image as ImageIcon, X, Loader2 } from "lucide-re
 
 interface ChatPanelProps {
   sessionId: number;
-  initialMessages: { role: string; content: string }[];
+  initialMessages: { id: number; role: string; content: string }[];
+  hasMoreMessages: boolean;
   onVoiceMode?: () => void;
   onNotesUpdated?: (notes: string | null) => void;
   onNoteChange?: () => void;
@@ -24,7 +25,7 @@ interface ImageAttachment {
   preview: string;
 }
 
-export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpdated, onNoteChange }: ChatPanelProps) {
+export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoiceMode, onNotesUpdated, onNoteChange }: ChatPanelProps) {
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,6 +33,8 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
   const [expanded, setExpanded] = useState(false);
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [hasMore, setHasMore] = useState(hasMoreMessages);
+  const [loadingMore, setLoadingMore] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollOpacity, setScrollOpacity] = useState(0);
@@ -39,17 +42,59 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLongPressRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialScrollDone = useRef(false);
+  const syntheticIdRef = useRef(0);
+  const synthId = () => --syntheticIdRef.current;
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!initialScrollDone.current && messages.length > 0 && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      initialScrollDone.current = true;
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || messages.length === 0) return;
+    const oldestId = messages[0].id;
+    const scrollEl = scrollRef.current;
+    const prevScrollHeight = scrollEl?.scrollHeight ?? 0;
+    const prevScrollTop = scrollEl?.scrollTop ?? 0;
+
+    setLoadingMore(true);
+    try {
+      const { messages: older, has_more } = await getMessages(sessionId, oldestId, 7);
+      if (older.length > 0) {
+        setMessages((prev) => [...older, ...prev]);
+        setHasMore(has_more);
+        // preserve scroll position after prepending
+        requestAnimationFrame(() => {
+          if (scrollEl) {
+            const newScrollHeight = scrollEl.scrollHeight;
+            scrollEl.scrollTop = newScrollHeight - prevScrollHeight + prevScrollTop;
+          }
+        });
+      } else {
+        setHasMore(false);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [sessionId, hasMore, loadingMore, messages]);
 
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return;
-    const { scrollTop } = scrollRef.current;
+    const el = scrollRef.current;
+    const { scrollTop } = el;
     const maxScroll = 80;
     setScrollOpacity(Math.min(1, scrollTop / maxScroll));
-  }, []);
+    if (scrollTop <= 40 && hasMore && !loadingMore) {
+      loadMore();
+    }
+  }, [hasMore, loadingMore, loadMore]);
 
   // Cleanup previews on unmount
   useEffect(() => {
@@ -104,6 +149,7 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
           setMessages((prev) => [
             ...prev,
             {
+              id: synthId(),
               role: "assistant",
               content: `📸 **${imagesToUpload.length} image${imagesToUpload.length > 1 ? "s" : ""} uploaded** — I've read and remembered the content. Ask me anything about it!`,
             },
@@ -112,7 +158,7 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
         .catch(() => {
           setMessages((prev) => [
             ...prev,
-            { role: "assistant", content: "Failed to upload images. Try again." },
+            { id: synthId(), role: "assistant", content: "Failed to upload images. Try again." },
           ]);
         })
         .finally(() => setUploading(false));
@@ -121,19 +167,19 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
     // If there's also a text message, send it as chat
     if (msg) {
       setInput("");
-      setMessages((prev) => [...prev, { role: "user", content: msg }]);
+      setMessages((prev) => [...prev, { id: synthId(), role: "user", content: msg }]);
       setLoading(true);
 
       try {
         const data = await sendMessage(sessionId, msg);
-        setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
+        setMessages((prev) => [...prev, { id: synthId(), role: "assistant", content: data.response }]);
         if (data.note_changes?.length || data.canvas_changes?.length) {
           onNoteChange?.();
         }
       } catch {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: "Failed to get response. Try again." },
+          { id: synthId(), role: "assistant", content: "Failed to get response. Try again." },
         ]);
       } finally {
         setLoading(false);
@@ -217,6 +263,20 @@ export function ChatPanel({ sessionId, initialMessages, onVoiceMode, onNotesUpda
           {messages.length === 0 && (
             <div className="flex items-center justify-center h-full text-muted-foreground text-base">
               Ask anything about your study material
+            </div>
+          )}
+          {(loadingMore || hasMore) && messages.length > 0 && (
+            <div className="flex justify-center py-2">
+              {loadingMore ? (
+                <Loader2 size={16} className="animate-spin text-muted-foreground" />
+              ) : (
+                <button
+                  onClick={loadMore}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Load older messages
+                </button>
+              )}
             </div>
           )}
           {messages.map((msg, i) => (

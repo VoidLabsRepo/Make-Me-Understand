@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion } from "motion/react";
 import { bounce } from "@/lib/animations";
-import { Plus, X, LayoutGrid } from "lucide-react";
+import { Plus, X, LayoutGrid, Loader2 } from "lucide-react";
 import {
   ReactFlow,
   Background,
@@ -14,6 +14,7 @@ import {
 import { CanvasNode } from "@/components/canvas-node";
 import {
   listCanvases,
+  getCanvas,
   createCanvas,
   updateCanvas,
   deleteCanvas,
@@ -32,11 +33,21 @@ export function CanvasPanel({ sessionId, refreshTrigger }: CanvasPanelProps) {
   const [canvases, setCanvases] = useState<Canvas[]>([]);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeLoading, setActiveLoading] = useState(false);
+  const loadedElementsRef = useRef<Set<number>>(new Set());
 
   const fetchCanvases = useCallback(async () => {
     try {
       const data = await listCanvases(sessionId);
-      setCanvases(data);
+      setCanvases((prev) => {
+        const byId = new Map(prev.map((c) => [c.id, c]));
+        return data.map((c) => {
+          const existing = byId.get(c.id);
+          return existing && existing.elements !== undefined
+            ? { ...c, elements: existing.elements }
+            : c;
+        });
+      });
       if (data.length > 0 && !data.find((c) => c.id === activeId)) {
         setActiveId(data[0].id);
       }
@@ -59,6 +70,35 @@ export function CanvasPanel({ sessionId, refreshTrigger }: CanvasPanelProps) {
 
   const activeCanvas = canvases.find((c) => c.id === activeId);
 
+  // Lazy-load elements for the active canvas if missing
+  useEffect(() => {
+    if (
+      !activeCanvas ||
+      activeCanvas.elements !== undefined ||
+      loadedElementsRef.current.has(activeCanvas.id)
+    ) {
+      return;
+    }
+    loadedElementsRef.current.add(activeCanvas.id);
+    setActiveLoading(true);
+    getCanvas(activeCanvas.id)
+      .then((full) => {
+        setCanvases((prev) => prev.map((c) => (c.id === full.id ? { ...c, elements: full.elements } : c)));
+      })
+      .catch(() => {
+        loadedElementsRef.current.delete(activeCanvas.id);
+      })
+      .finally(() => setActiveLoading(false));
+  }, [activeCanvas]);
+
+  // Evict deleted canvases from the elements cache
+  useEffect(() => {
+    const liveIds = new Set(canvases.map((c) => c.id));
+    for (const id of loadedElementsRef.current) {
+      if (!liveIds.has(id)) loadedElementsRef.current.delete(id);
+    }
+  }, [canvases]);
+
   const handleAdd = async () => {
     try {
       const canvas = await createCanvas(sessionId, "Untitled Canvas", []);
@@ -73,6 +113,7 @@ export function CanvasPanel({ sessionId, refreshTrigger }: CanvasPanelProps) {
     try {
       await deleteCanvas(id);
       setCanvases((prev) => prev.filter((c) => c.id !== id));
+      loadedElementsRef.current.delete(id);
       if (activeId === id) {
         setActiveId(canvases.find((c) => c.id !== id)?.id ?? null);
       }
@@ -142,7 +183,13 @@ export function CanvasPanel({ sessionId, refreshTrigger }: CanvasPanelProps) {
 
       <div className="flex-1 min-h-0">
         {activeCanvas ? (
-          <CanvasView elements={activeCanvas.elements} />
+          activeLoading || activeCanvas.elements === undefined ? (
+            <div className="h-full flex items-center justify-center text-muted-foreground">
+              <Loader2 size={16} className="animate-spin" />
+            </div>
+          ) : (
+            <CanvasView elements={activeCanvas.elements} />
+          )
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-muted-foreground gap-3 p-6">
             <LayoutGrid size={32} strokeWidth={1} />
@@ -283,3 +330,4 @@ function EditableTitle({
     </span>
   );
 }
+

@@ -376,6 +376,7 @@ export default function SessionPage() {
           <ChatPanel
             sessionId={session.id}
             initialMessages={session.messages || []}
+            hasMoreMessages={session.has_more_messages ?? false}
             onVoiceMode={() => setVoiceMode(true)}
             onNotesUpdated={handleNotesUpdated}
             onNoteChange={handleRefresh}
