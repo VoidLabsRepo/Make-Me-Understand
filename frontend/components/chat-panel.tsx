@@ -197,7 +197,8 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
         if (data.note_changes?.length || data.canvas_changes?.length) {
           onNoteChange?.();
         }
-      } catch {
+      } catch (e: any) {
+        console.error("[chat] sendMessage failed:", e?.name, e?.message);
         setMessages((prev) => [
           ...prev,
           { id: synthId(), role: "assistant", content: "Failed to get response. Try again." },
