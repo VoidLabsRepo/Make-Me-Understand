@@ -123,13 +123,20 @@ export const CanvasNode = memo(({ data, selected }: NodeProps) => {
   const isFlowchart = d.type === "flowchart";
   const flowSteps = isFlowchart ? parseFlowSteps(d.content) : [];
 
+  if (isHeading) {
+    return (
+      <div className="px-2 py-1 pointer-events-none select-none">
+        <h3 className="text-base font-bold text-gray-800 leading-tight tracking-tight">{d.label}</h3>
+      </div>
+    );
+  }
+
   return (
     <BaseNode
       className={cn(
         "p-0 border-2 shadow-sm",
         style.border,
-        isHeading && "bg-white",
-        !isHeading && style.bg,
+        style.bg,
         selected && "shadow-lg ring-2 ring-foreground/30",
       )}
     >
@@ -150,17 +157,15 @@ export const CanvasNode = memo(({ data, selected }: NodeProps) => {
       <BaseNodeHeaderTitle className={cn("px-3 pt-2 text-sm font-semibold", style.text)}>
         {d.label}
       </BaseNodeHeaderTitle>
-      {!isHeading && (
-        <BaseNodeContent className="px-3 pb-3 pt-1">
-          {isFlowchart && flowSteps.length >= 2 ? (
-            <FlowchartSteps steps={flowSteps} textClass={style.text} />
-          ) : (
-            <p className={cn("text-xs leading-relaxed whitespace-pre-wrap break-words", style.text, "opacity-90")}>
-              {d.content}
-            </p>
-          )}
-        </BaseNodeContent>
-      )}
+      <BaseNodeContent className="px-3 pb-3 pt-1">
+        {isFlowchart && flowSteps.length >= 2 ? (
+          <FlowchartSteps steps={flowSteps} textClass={style.text} />
+        ) : (
+          <p className={cn("text-xs leading-relaxed whitespace-pre-wrap break-words", style.text, "opacity-90")}>
+            {d.content}
+          </p>
+        )}
+      </BaseNodeContent>
       <Handle
         type="source"
         position={Position.Right}
