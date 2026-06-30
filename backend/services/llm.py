@@ -129,7 +129,7 @@ async def synthesize_notes(extracted_text: str) -> str:
     return result["choices"][0]["message"]["content"]
 
 
-async def chat_with_context(notes: str, history: list[dict], user_message: str, existing_notes: list[dict] | None = None, user_notes: str = "", images: list[dict] | None = None) -> str:
+async def chat_with_context(notes: str, history: list[dict], user_message: str, existing_notes: list[dict] | None = None, user_notes: str = "", images: list[dict] | None = None, existing_canvases: list[dict] | None = None) -> str:
     """Chat with AI using notes as context. images = [{"mime": "image/jpeg", "b64": "..."}]"""
     notes_list_str = ""
     if existing_notes:
@@ -187,37 +187,141 @@ async def chat_with_context(notes: str, history: list[dict], user_message: str, 
             "- IMPORTANT: The note content MUST be formatted with markdown — use headers (#, ##, ###), bullet points, bold, etc.\n"
             "- IMPORTANT: When the user asks you to write, create, or save notes, you MUST output the JSON tool call. Do NOT just describe what you would write — actually write it in the tool call.\n"
             "- IMPORTANT: When you create or update a note via tool call, your response text should be SHORT — just confirm what you did. Do NOT repeat the note content in your response. Example: 'Done! I've created a note called \"Phase 1 Summary\" with your key points.'\n\n"
-            "## Canvas Management\n"
+            + (
+                f"You have existing canvases for this session:\n"
+                + "".join(f"- Canvas #{c['id']}: \"{c['title']}\"\n" for c in existing_canvases)
+                + "When the user asks to update a canvas, use the canvas id in the update tool call.\n\n"
+                if existing_canvases else ""
+            )
+            + "## Canvas Management\n"
             "You also have a Canvas tool. The Canvas is a visual board where you place COLORED RECTANGLES "
             "(one per concept) instead of writing long text. Each rectangle is a separate element with its own color. "
             "Use the Canvas when the student asks to visualize, draw, map out, or create a study board. "
             "ONLY create canvases when the user EXPLICITLY asks for one (e.g. 'make a canvas', 'visualize this', 'draw a map', 'create a flowchart', 'show me a diagram').\n\n"
-            "Element types and their auto-assigned colors:\n"
+
+            "### Chain of Thought for Canvas Creation\n"
+            "When the user asks to create a canvas, you MUST follow this process:\n"
+            "1. THINK internally: What template fits (Concept Map / Process Flow / Comparison / Formula Sheet / Mixed)? What elements with what types and content? What positions and connections?\n"
+            "2. EMIT THE TOOL CALL IMMEDIATELY — output the ```json code block with the canvas tool call.\n"
+            "3. After the tool call, write a SHORT confirmation (1-2 sentences max). Example: 'Done! Your comparison canvas is ready.'\n"
+            "CRITICAL: Do NOT write out the canvas content or describe what the canvas will look like in your response text BEFORE the tool call. "
+            "The tool call IS the creation. Emit it first, then confirm briefly.\n"
+            "WRONG (do not do this): 'I'll create a canvas with a heading, definitions, and connections... Here's what it will contain: [description]' then no tool call.\n"
+            "CORRECT: [emit tool call] then 'Done! Your canvas is ready.'\n\n"
+
+            "### Element Types and Colors\n"
             "- \"definition\" — Blue. For definitions of key terms.\n"
             "- \"formula\" — Green. For mathematical formulas or equations.\n"
             "- \"flowchart\" — Orange. For process steps in a workflow.\n"
             "- \"note\" — Purple. For general notes, important points, or takeaways.\n"
             "- \"example\" — Pink. For worked examples or illustrations.\n"
             "- \"heading\" — Gray. For section titles or category headers.\n\n"
+
+            "### Element Sizes (use exactly these)\n"
+            "- definition: {\"width\":260,\"height\":120}\n"
+            "- formula: {\"width\":280,\"height\":100}\n"
+            "- flowchart: {\"width\":240,\"height\":100}\n"
+            "- note: {\"width\":260,\"height\":120}\n"
+            "- example: {\"width\":260,\"height\":140}\n"
+            "- heading: {\"width\":300,\"height\":60}\n\n"
+
+            "### Layout Grid\n"
+            "- x positions in steps of 300: 0, 300, 600, 900, ...\n"
+            "- y positions in steps of 140: 0, 140, 280, 420, ...\n"
+            "- Max 10 elements per canvas for readability.\n\n"
+
+            "### Canvas Templates\n"
+            "Pick the template that best fits the content:\n\n"
+
+            "TEMPLATE 1: Concept Map\n"
+            "Use for: definitions, relationships, key terms.\n"
+            "Layout: heading at top-center, definitions in rows below, connections between related terms.\n"
+            "Example — 'Demand & Supply':\n"
+            '```json\n{"tool":"canvas","action":"create","title":"Demand & Supply","elements":['
+            '{"id":"e1","type":"heading","label":"Demand & Supply","content":"Key economic concepts","position":{"x":300,"y":0},"size":{"width":300,"height":60}},'
+            '{"id":"e2","type":"definition","label":"Demand","content":"Quantity consumers are willing to buy at a given price.","position":{"x":0,"y":140},"size":{"width":260,"height":120},"connections":["e5"]},'
+            '{"id":"e3","type":"definition","label":"Supply","content":"Quantity producers are willing to sell at a given price.","position":{"x":600,"y":140},"size":{"width":260,"height":120},"connections":["e5"]},'
+            '{"id":"e4","type":"note","label":"Law of Demand","content":"As price rises, quantity demanded falls (and vice versa).","position":{"x":0,"y":280},"size":{"width":260,"height":120}},'
+            '{"id":"e5","type":"flowchart","label":"Equilibrium","content":"Price where quantity demanded equals quantity supplied.","position":{"x":300,"y":280},"size":{"width":240,"height":100}},'
+            '{"id":"e6","type":"note","label":"Law of Supply","content":"As price rises, quantity supplied increases (and vice versa).","position":{"x":600,"y":280},"size":{"width":260,"height":120}}]}\n```\n\n'
+
+            "TEMPLATE 2: Process Flow\n"
+            "Use for: steps, workflows, sequences, procedures.\n"
+            "Layout: heading at top, flowchart steps in a chain (each step connects to the next).\n"
+            "Example — 'Photosynthesis':\n"
+            '```json\n{"tool":"canvas","action":"create","title":"Photosynthesis Process","elements":['
+            '{"id":"e1","type":"heading","label":"Photosynthesis","content":"Light-dependent reactions","position":{"x":300,"y":0},"size":{"width":300,"height":60}},'
+            '{"id":"e2","type":"flowchart","label":"1. Light Absorption","content":"Chlorophyll absorbs sunlight, exciting electrons.","position":{"x":300,"y":140},"size":{"width":240,"height":100},"connections":["e3"]},'
+            '{"id":"e3","type":"flowchart","label":"2. Water Splitting","content":"Light energy splits H₂O into O₂, H⁺, and electrons.","position":{"x":300,"y":280},"size":{"width":240,"height":100},"connections":["e4"]},'
+            '{"id":"e4","type":"flowchart","label":"3. Calvin Cycle","content":"CO₂ is converted to G3P (sugar precursor).","position":{"x":300,"y":420},"size":{"width":240,"height":100},"connections":["e5"]},'
+            '{"id":"e5","type":"flowchart","label":"4. Glucose Synthesis","content":"G3P molecules build glucose (C₆H₁₂O₆).","position":{"x":300,"y":560},"size":{"width":240,"height":100}},'
+            '{"id":"e6","type":"definition","label":"Chlorophyll","content":"Green pigment in chloroplasts that absorbs light energy.","position":{"x":0,"y":140},"size":{"width":260,"height":120}},'
+            '{"id":"e7","type":"formula","label":"Overall Equation","content":"6CO₂ + 6H₂O + Light → C₆H₁₂O₆ + 6O₂","position":{"x":600,"y":280},"size":{"width":280,"height":100}}]}\n```\n\n'
+
+            "TEMPLATE 3: Comparison\n"
+            "Use for: comparing two concepts, pros/cons, before/after.\n"
+            "Layout: two headings side-by-side, matching elements below each.\n"
+            "Example — 'Mitosis vs Meiosis':\n"
+            '```json\n{"tool":"canvas","action":"create","title":"Mitosis vs Meiosis","elements":['
+            '{"id":"e1","type":"heading","label":"Mitosis","content":"Cell division for growth","position":{"x":0,"y":0},"size":{"width":300,"height":60}},'
+            '{"id":"e2","type":"heading","label":"Meiosis","content":"Cell division for gametes","position":{"x":600,"y":0},"size":{"width":300,"height":60}},'
+            '{"id":"e3","type":"note","label":"Divisions","content":"One division","position":{"x":0,"y":140},"size":{"width":260,"height":120}},'
+            '{"id":"e4","type":"note","label":"Divisions","content":"Two divisions","position":{"x":600,"y":140},"size":{"width":260,"height":120}},'
+            '{"id":"e5","type":"note","label":"Daughter Cells","content":"Two identical diploid cells","position":{"x":0,"y":280},"size":{"width":260,"height":120}},'
+            '{"id":"e6","type":"note","label":"Daughter Cells","content":"Four unique haploid cells","position":{"x":600,"y":280},"size":{"width":260,"height":120}},'
+            '{"id":"e7","type":"example","label":"Purpose","content":"Growth and repair","position":{"x":0,"y":420},"size":{"width":260,"height":140}},'
+            '{"id":"e8","type":"example","label":"Purpose","content":"Sexual reproduction","position":{"x":600,"y":420},"size":{"width":260,"height":140}}]}\n```\n\n'
+
+            "TEMPLATE 4: Formula Sheet\n"
+            "Use for: math, physics, chemistry formulas.\n"
+            "Layout: heading at top, formula elements in rows, note elements explaining variables.\n"
+            "Example — 'Newton's Laws':\n"
+            '```json\n{"tool":"canvas","action":"create","title":"Newton\'s Laws of Motion","elements":['
+            '{"id":"e1","type":"heading","label":"Newton\'s Laws","content":"Three fundamental laws of motion","position":{"x":300,"y":0},"size":{"width":300,"height":60}},'
+            '{"id":"e2","type":"formula","label":"1st Law","content":"F = 0 → v = constant (inertia)","position":{"x":0,"y":140},"size":{"width":280,"height":100}},'
+            '{"id":"e3","type":"note","label":"1st Law Meaning","content":"An object at rest stays at rest; an object in motion stays in motion unless acted on by a force.","position":{"x":0,"y":280},"size":{"width":260,"height":120}},'
+            '{"id":"e4","type":"formula","label":"2nd Law","content":"F = ma","position":{"x":600,"y":140},"size":{"width":280,"height":100}},'
+            '{"id":"e5","type":"note","label":"2nd Law Meaning","content":"Force equals mass times acceleration. Greater mass needs more force to accelerate.","position":{"x":600,"y":280},"size":{"width":260,"height":120}},'
+            '{"id":"e6","type":"formula","label":"3rd Law","content":"F₁₂ = -F₂₁","position":{"x":300,"y":420},"size":{"width":280,"height":100}},'
+            '{"id":"e7","type":"note","label":"3rd Law Meaning","content":"Every action has an equal and opposite reaction.","position":{"x":300,"y":560},"size":{"width":260,"height":120}}]}\n```\n\n'
+
+            "TEMPLATE 5: Mixed\n"
+            "Use for: general topics that don't fit other templates.\n"
+            "Layout: heading at top, mix of definitions, notes, and examples in rows.\n"
+            "Max 8 elements. Group related items vertically.\n\n"
+
+            "### Element Content Rules\n"
+            "- definitions: 1-2 sentences max. State the term clearly.\n"
+            "- formulas: The formula + one-line explanation. No derivation.\n"
+            "- flowchart steps: One sentence per step. Keep it actionable.\n"
+            "- notes: Key takeaway only. No full paragraphs.\n"
+            "- examples: One concrete, short example. No lengthy explanations.\n"
+            "- headings: Short title only (2-4 words).\n\n"
+
+            "### Connection Rules\n"
+            "- Only connect elements that are logically related.\n"
+            "- Flowchart steps: each step connects to the next (e2→e3, e3→e4).\n"
+            "- Definitions: connect to their parent heading or related concept.\n"
+            "- Do NOT connect unrelated elements.\n"
+            "- Max 3 outgoing connections per element.\n\n"
+
             "Canvas tool call format:\n\n"
-            '```json\n{"tool":"canvas","action":"create","title":"Supply & Demand","elements":['
-            '{"id":"e1","type":"definition","label":"Supply","content":"The quantity of a good producers are willing to sell at a given price.","position":{"x":0,"y":0},"size":{"width":260,"height":120},'
-            '"connections":["e3"]},'
-            '{"id":"e2","type":"definition","label":"Demand","content":"The quantity of a good consumers are willing to buy at a given price.","position":{"x":320,"y":0},"size":{"width":260,"height":120},'
-            '"connections":["e3"]},'
-            '{"id":"e3","type":"flowchart","label":"Equilibrium","content":"The price at which supply and demand are equal.","position":{"x":160,"y":180},"size":{"width":260,"height":120}}]}\n```\n\n'
+            '```json\n{"tool":"canvas","action":"create","title":"Canvas Title","elements":[...]}\n```\n\n'
             "Update format:\n"
             '```json\n{"tool":"canvas","action":"update","id":7,"title":"Optional new title","elements":[...full new elements array...]}\n```\n\n'
             "Delete format:\n"
             '```json\n{"tool":"canvas","action":"delete","id":7}\n```\n\n'
-            "Canvas rules:\n"
+
+            "### Final Rules\n"
             "- Each element needs a unique `id` (e.g. \"e1\", \"e2\").\n"
-            "- Position elements in a clean grid: x in steps of 280, y in steps of 160.\n"
-            "- `size` should be reasonable: width 240-320, height 100-160.\n"
-            "- `connections` lists ids of elements this element points to (used for flowchart arrows).\n"
+            "- Use EXACTLY the sizes specified above for each element type.\n"
+            "- Follow the grid: x in steps of 300, y in steps of 140.\n"
+            "- Max 10 elements per canvas.\n"
             "- When updating, send the FULL elements array — it replaces the old one.\n"
-            "- When creating, write a SHORT response confirming what you built. Do NOT repeat the element content in your response text.\n"
+            "- When creating, write a SHORT response confirming what you built. Do NOT repeat the element content.\n"
             "- Pull canvas content from the study material notes, not from your own invention.\n"
+            "- Choose the best template for the content, or use Mixed if none fit perfectly.\n"
+            "- ALWAYS emit the tool call. Never describe the canvas in text without also emitting the tool call JSON block.\n"
         )
 
     messages = [
@@ -299,7 +403,7 @@ async def voice_explain(notes: str, question: str) -> str:
     return result["choices"][0]["message"]["content"]
 
 
-async def voice_chat_with_context(notes: str, history: list[dict], user_message: str, existing_notes: list[dict] | None = None, user_notes: str = "", images: list[dict] | None = None) -> str:
+async def voice_chat_with_context(notes: str, history: list[dict], user_message: str, existing_notes: list[dict] | None = None, user_notes: str = "", images: list[dict] | None = None, existing_canvases: list[dict] | None = None) -> str:
     """Generate a voice-friendly explanation with chat history and context."""
     notes_list_str = ""
     if existing_notes:
@@ -386,17 +490,123 @@ async def voice_chat_with_context(notes: str, history: list[dict], user_message:
         "- Your spoken response should be SHORT when creating notes — just confirm.\n"
         "- Do NOT repeat the note content in your spoken words.\n"
         "- The JSON must be valid and inside a ```json code block\n\n"
-        "# Canvas Creation\n"
+        + (
+            f"You have existing canvases for this session:\n"
+            + "".join(f"- Canvas #{c['id']}: \"{c['title']}\"\n" for c in existing_canvases)
+            + "When the student asks to update a canvas, use the canvas id in the update tool call.\n\n"
+            if existing_canvases else ""
+        )
+        + "# Canvas Creation\n"
         "You also have a Canvas tool. The Canvas is a visual board with COLORED RECTANGLES "
         "(one per concept) instead of long text. Use it when the student says 'make a canvas', 'visualize this', 'draw a map', 'create a flowchart', 'show me a diagram'.\n"
         "ONLY create canvases when the student EXPLICITLY asks for one. Do NOT create a canvas just because you explained something.\n\n"
-        "Element types and their auto-assigned colors:\n"
+
+        "### Chain of Thought for Canvas Creation\n"
+        "When the student asks to create a canvas, you MUST follow this process:\n"
+        "1. THINK internally: What template fits? What elements with what types and content? What positions and connections?\n"
+        "2. EMIT THE TOOL CALL IMMEDIATELY — output the ```json code block with the canvas tool call.\n"
+        "3. After the tool call, write a SHORT spoken confirmation (1-2 sentences max). Example: 'Done! Your canvas is ready.'\n"
+        "CRITICAL: Do NOT describe what the canvas will look like or list out the elements in your spoken response BEFORE the tool call. "
+        "The tool call IS the creation. Emit it first, then confirm briefly.\n"
+        "WRONG: 'I'll create a canvas with a heading and definitions...' then no tool call.\n"
+        "CORRECT: [emit tool call] then 'Done! Your canvas is ready.'\n\n"
+
+        "### Element Types and Colors\n"
         "- \"definition\" — Blue. For definitions of key terms.\n"
         "- \"formula\" — Green. For mathematical formulas or equations.\n"
         "- \"flowchart\" — Orange. For process steps.\n"
         "- \"note\" — Purple. For general notes or takeaways.\n"
         "- \"example\" — Pink. For worked examples.\n"
         "- \"heading\" — Gray. For section titles.\n\n"
+
+        "### Element Sizes (use exactly these)\n"
+        "- definition: {\"width\":260,\"height\":120}\n"
+        "- formula: {\"width\":280,\"height\":100}\n"
+        "- flowchart: {\"width\":240,\"height\":100}\n"
+        "- note: {\"width\":260,\"height\":120}\n"
+        "- example: {\"width\":260,\"height\":140}\n"
+        "- heading: {\"width\":300,\"height\":60}\n\n"
+
+        "### Layout Grid\n"
+        "- x positions in steps of 300: 0, 300, 600, 900, ...\n"
+        "- y positions in steps of 140: 0, 140, 280, 420, ...\n"
+        "- Max 10 elements per canvas for readability.\n\n"
+
+        "### Canvas Templates\n"
+        "Pick the template that best fits the content:\n\n"
+
+        "TEMPLATE 1: Concept Map\n"
+        "Use for: definitions, relationships, key terms.\n"
+        "Layout: heading at top-center, definitions in rows below, connections between related terms.\n"
+        "Example — 'Demand & Supply':\n"
+        '```json\n{"tool":"canvas","action":"create","title":"Demand & Supply","elements":['
+        '{"id":"e1","type":"heading","label":"Demand & Supply","content":"Key economic concepts","position":{"x":300,"y":0},"size":{"width":300,"height":60}},'
+        '{"id":"e2","type":"definition","label":"Demand","content":"Quantity consumers are willing to buy at a given price.","position":{"x":0,"y":140},"size":{"width":260,"height":120},"connections":["e5"]},'
+        '{"id":"e3","type":"definition","label":"Supply","content":"Quantity producers are willing to sell at a given price.","position":{"x":600,"y":140},"size":{"width":260,"height":120},"connections":["e5"]},'
+        '{"id":"e4","type":"note","label":"Law of Demand","content":"As price rises, quantity demanded falls (and vice versa).","position":{"x":0,"y":280},"size":{"width":260,"height":120}},'
+        '{"id":"e5","type":"flowchart","label":"Equilibrium","content":"Price where quantity demanded equals quantity supplied.","position":{"x":300,"y":280},"size":{"width":240,"height":100}},'
+        '{"id":"e6","type":"note","label":"Law of Supply","content":"As price rises, quantity supplied increases (and vice versa).","position":{"x":600,"y":280},"size":{"width":260,"height":120}}]}\n```\n\n'
+
+        "TEMPLATE 2: Process Flow\n"
+        "Use for: steps, workflows, sequences, procedures.\n"
+        "Layout: heading at top, flowchart steps in a chain (each step connects to the next).\n"
+        "Example — 'Photosynthesis':\n"
+        '```json\n{"tool":"canvas","action":"create","title":"Photosynthesis Process","elements":['
+        '{"id":"e1","type":"heading","label":"Photosynthesis","content":"Light-dependent reactions","position":{"x":300,"y":0},"size":{"width":300,"height":60}},'
+        '{"id":"e2","type":"flowchart","label":"1. Light Absorption","content":"Chlorophyll absorbs sunlight, exciting electrons.","position":{"x":300,"y":140},"size":{"width":240,"height":100},"connections":["e3"]},'
+        '{"id":"e3","type":"flowchart","label":"2. Water Splitting","content":"Light energy splits H₂O into O₂, H⁺, and electrons.","position":{"x":300,"y":280},"size":{"width":240,"height":100},"connections":["e4"]},'
+        '{"id":"e4","type":"flowchart","label":"3. Calvin Cycle","content":"CO₂ is converted to G3P (sugar precursor).","position":{"x":300,"y":420},"size":{"width":240,"height":100},"connections":["e5"]},'
+        '{"id":"e5","type":"flowchart","label":"4. Glucose Synthesis","content":"G3P molecules build glucose (C₆H₁₂O₆).","position":{"x":300,"y":560},"size":{"width":240,"height":100}},'
+        '{"id":"e6","type":"definition","label":"Chlorophyll","content":"Green pigment in chloroplasts that absorbs light energy.","position":{"x":0,"y":140},"size":{"width":260,"height":120}},'
+        '{"id":"e7","type":"formula","label":"Overall Equation","content":"6CO₂ + 6H₂O + Light → C₆H₁₂O₆ + 6O₂","position":{"x":600,"y":280},"size":{"width":280,"height":100}}]}\n```\n\n'
+
+        "TEMPLATE 3: Comparison\n"
+        "Use for: comparing two concepts, pros/cons, before/after.\n"
+        "Layout: two headings side-by-side, matching elements below each.\n"
+        "Example — 'Mitosis vs Meiosis':\n"
+        '```json\n{"tool":"canvas","action":"create","title":"Mitosis vs Meiosis","elements":['
+        '{"id":"e1","type":"heading","label":"Mitosis","content":"Cell division for growth","position":{"x":0,"y":0},"size":{"width":300,"height":60}},'
+        '{"id":"e2","type":"heading","label":"Meiosis","content":"Cell division for gametes","position":{"x":600,"y":0},"size":{"width":300,"height":60}},'
+        '{"id":"e3","type":"note","label":"Divisions","content":"One division","position":{"x":0,"y":140},"size":{"width":260,"height":120}},'
+        '{"id":"e4","type":"note","label":"Divisions","content":"Two divisions","position":{"x":600,"y":140},"size":{"width":260,"height":120}},'
+        '{"id":"e5","type":"note","label":"Daughter Cells","content":"Two identical diploid cells","position":{"x":0,"y":280},"size":{"width":260,"height":120}},'
+        '{"id":"e6","type":"note","label":"Daughter Cells","content":"Four unique haploid cells","position":{"x":600,"y":280},"size":{"width":260,"height":120}},'
+        '{"id":"e7","type":"example","label":"Purpose","content":"Growth and repair","position":{"x":0,"y":420},"size":{"width":260,"height":140}},'
+        '{"id":"e8","type":"example","label":"Purpose","content":"Sexual reproduction","position":{"x":600,"y":420},"size":{"width":260,"height":140}}]}\n```\n\n'
+
+        "TEMPLATE 4: Formula Sheet\n"
+        "Use for: math, physics, chemistry formulas.\n"
+        "Layout: heading at top, formula elements in rows, note elements explaining variables.\n"
+        "Example — 'Newton's Laws':\n"
+        '```json\n{"tool":"canvas","action":"create","title":"Newton\'s Laws of Motion","elements":['
+        '{"id":"e1","type":"heading","label":"Newton\'s Laws","content":"Three fundamental laws of motion","position":{"x":300,"y":0},"size":{"width":300,"height":60}},'
+        '{"id":"e2","type":"formula","label":"1st Law","content":"F = 0 → v = constant (inertia)","position":{"x":0,"y":140},"size":{"width":280,"height":100}},'
+        '{"id":"e3","type":"note","label":"1st Law Meaning","content":"An object at rest stays at rest; an object in motion stays in motion unless acted on by a force.","position":{"x":0,"y":280},"size":{"width":260,"height":120}},'
+        '{"id":"e4","type":"formula","label":"2nd Law","content":"F = ma","position":{"x":600,"y":140},"size":{"width":280,"height":100}},'
+        '{"id":"e5","type":"note","label":"2nd Law Meaning","content":"Force equals mass times acceleration. Greater mass needs more force to accelerate.","position":{"x":600,"y":280},"size":{"width":260,"height":120}},'
+        '{"id":"e6","type":"formula","label":"3rd Law","content":"F₁₂ = -F₂₁","position":{"x":300,"y":420},"size":{"width":280,"height":100}},'
+        '{"id":"e7","type":"note","label":"3rd Law Meaning","content":"Every action has an equal and opposite reaction.","position":{"x":300,"y":560},"size":{"width":260,"height":120}}]}\n```\n\n'
+
+        "TEMPLATE 5: Mixed\n"
+        "Use for: general topics that don't fit other templates.\n"
+        "Layout: heading at top, mix of definitions, notes, and examples in rows.\n"
+        "Max 8 elements. Group related items vertically.\n\n"
+
+        "### Element Content Rules\n"
+        "- definitions: 1-2 sentences max. State the term clearly.\n"
+        "- formulas: The formula + one-line explanation. No derivation.\n"
+        "- flowchart steps: One sentence per step. Keep it actionable.\n"
+        "- notes: Key takeaway only. No full paragraphs.\n"
+        "- examples: One concrete, short example. No lengthy explanations.\n"
+        "- headings: Short title only (2-4 words).\n\n"
+
+        "### Connection Rules\n"
+        "- Only connect elements that are logically related.\n"
+        "- Flowchart steps: each step connects to the next (e2→e3, e3→e4).\n"
+        "- Definitions: connect to their parent heading or related concept.\n"
+        "- Do NOT connect unrelated elements.\n"
+        "- Max 3 outgoing connections per element.\n\n"
+
         "Canvas tool call format:\n\n"
         '```json\n{"tool":"canvas","action":"create","title":"Board Title","elements":['
         '{"id":"e1","type":"definition","label":"Term","content":"The definition.","position":{"x":0,"y":0},"size":{"width":260,"height":120}}]}\n```\n\n'
@@ -404,14 +614,17 @@ async def voice_chat_with_context(notes: str, history: list[dict], user_message:
         '```json\n{"tool":"canvas","action":"update","id":7,"elements":[...full new elements...]}\n```\n\n'
         "Delete format:\n"
         '```json\n{"tool":"canvas","action":"delete","id":7}\n```\n\n'
-        "Canvas rules:\n"
+
+        "### Final Rules\n"
         "- Each element needs a unique `id` (e.g. \"e1\").\n"
-        "- Position in a clean grid: x in steps of 280, y in steps of 160.\n"
-        "- `size` should be reasonable: width 240-320, height 100-160.\n"
-        "- `connections` lists ids of elements this element points to.\n"
+        "- Use EXACTLY the sizes specified above for each element type.\n"
+        "- Follow the grid: x in steps of 300, y in steps of 140.\n"
+        "- Max 10 elements per canvas.\n"
         "- When updating, send the FULL elements array — it replaces the old one.\n"
         "- Your spoken response should be SHORT when creating a canvas — just confirm what you built.\n"
-        "- The JSON must be valid and inside a ```json code block\n\n"
+        "- The JSON must be valid and inside a ```json code block\n"
+        "- Choose the best template for the content, or use Mixed if none fit perfectly.\n"
+        "- ALWAYS emit the tool call. Never describe the canvas in text without also emitting the tool call JSON block.\n\n"
 
         f"--- Study Material Notes ---\n{notes}\n\n"
         f"{user_notes}\n"

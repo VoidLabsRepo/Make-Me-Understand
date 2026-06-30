@@ -24,6 +24,14 @@ async def _fetch_notes_list(db: aiosqlite.Connection, session_id: int) -> list[d
     return [dict(r) for r in await cursor.fetchall()]
 
 
+async def _fetch_canvases_list(db: aiosqlite.Connection, session_id: int) -> list[dict]:
+    cursor = await db.execute(
+        "SELECT id, title FROM canvases WHERE session_id = ? ORDER BY created_at",
+        (session_id,),
+    )
+    return [dict(r) for r in await cursor.fetchall()]
+
+
 def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
     """Extract JSON tool calls from ```json code blocks. Returns (cleaned_response, tool_calls)."""
     tool_calls = []
@@ -46,19 +54,29 @@ def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
                     })
                 elif action == "update":
                     note_id = data.get("id")
-                    if note_id and isinstance(note_id, int):
-                        tool_calls.append({
-                            "action": "update_note",
-                            "note_id": note_id,
-                            "content": data.get("content", ""),
-                        })
+                    if note_id is not None:
+                        try:
+                            note_id = int(note_id)
+                        except (TypeError, ValueError):
+                            note_id = None
+                        if note_id:
+                            tool_calls.append({
+                                "action": "update_note",
+                                "note_id": note_id,
+                                "content": data.get("content", ""),
+                            })
                 elif action == "delete":
                     note_id = data.get("id")
-                    if note_id and isinstance(note_id, int):
-                        tool_calls.append({
-                            "action": "delete_note",
-                            "note_id": note_id,
-                        })
+                    if note_id is not None:
+                        try:
+                            note_id = int(note_id)
+                        except (TypeError, ValueError):
+                            note_id = None
+                        if note_id:
+                            tool_calls.append({
+                                "action": "delete_note",
+                                "note_id": note_id,
+                            })
             elif tool == "canvas":
                 action = data.get("action")
                 if action == "create":
@@ -69,23 +87,33 @@ def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
                     })
                 elif action == "update":
                     canvas_id = data.get("id")
-                    if canvas_id and isinstance(canvas_id, int):
-                        update_kwargs: dict = {"canvas_id": canvas_id}
-                        if "title" in data:
-                            update_kwargs["title"] = data["title"]
-                        if "elements" in data:
-                            update_kwargs["elements"] = data["elements"]
-                        tool_calls.append({
-                            "action": "update_canvas",
-                            **update_kwargs,
-                        })
+                    if canvas_id is not None:
+                        try:
+                            canvas_id = int(canvas_id)
+                        except (TypeError, ValueError):
+                            canvas_id = None
+                        if canvas_id:
+                            update_kwargs: dict = {"canvas_id": canvas_id}
+                            if "title" in data:
+                                update_kwargs["title"] = data["title"]
+                            if "elements" in data:
+                                update_kwargs["elements"] = data["elements"]
+                            tool_calls.append({
+                                "action": "update_canvas",
+                                **update_kwargs,
+                            })
                 elif action == "delete":
                     canvas_id = data.get("id")
-                    if canvas_id and isinstance(canvas_id, int):
-                        tool_calls.append({
-                            "action": "delete_canvas",
-                            "canvas_id": canvas_id,
-                        })
+                    if canvas_id is not None:
+                        try:
+                            canvas_id = int(canvas_id)
+                        except (TypeError, ValueError):
+                            canvas_id = None
+                        if canvas_id:
+                            tool_calls.append({
+                                "action": "delete_canvas",
+                                "canvas_id": canvas_id,
+                            })
         except (json.JSONDecodeError, TypeError):
             pass
         # Remove the matched block from response
@@ -187,6 +215,9 @@ async def chat(
     # Get existing notes list for AI context
     existing_notes = await _fetch_notes_list(db, session_id)
 
+    # Get existing canvases list for AI context
+    existing_canvases = await _fetch_canvases_list(db, session_id)
+
     # Build user notes content for chat context
     user_notes_str = ""
     if existing_notes:
@@ -214,6 +245,7 @@ async def chat(
         notes, history, req.message,
         existing_notes=existing_notes, user_notes=user_notes_str,
         images=images if images else None,
+        existing_canvases=existing_canvases,
     )
 
     # Parse and execute tool calls
@@ -280,6 +312,9 @@ async def voice_chat(
     # Get existing notes list for AI context
     existing_notes = await _fetch_notes_list(db, session_id)
 
+    # Get existing canvases list for AI context
+    existing_canvases = await _fetch_canvases_list(db, session_id)
+
     # Build user notes content for voice context
     user_notes_str = ""
     if existing_notes:
@@ -307,6 +342,7 @@ async def voice_chat(
         notes, history, req.message,
         existing_notes=existing_notes, user_notes=user_notes_str,
         images=images if images else None,
+        existing_canvases=existing_canvases,
     )
 
     # Parse and execute note + canvas tool calls before cleaning text

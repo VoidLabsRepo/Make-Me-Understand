@@ -6,11 +6,12 @@ import { motion, AnimatePresence } from "motion/react";
 import { bounce, stagger, cardPop } from "@/lib/animations";
 import { UploadDialog } from "@/components/upload-dialog";
 import { listSessions, renameSession, deleteSession, type SessionListItem } from "@/lib/api";
-import { BookOpen, MoreHorizontal, Pencil, Trash2, Check, X, FolderOpen } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Check, X, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
 import { StudySpaces } from "@/components/study-spaces";
+import { Signature } from "@/components/ui/signature";
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
@@ -110,11 +111,13 @@ export default function Dashboard() {
         >
           <div className="max-w-5xl mx-auto px-4 md:px-6 py-10 md:py-16" style={{ overflow: "visible" }}>
             <div className="flex flex-col items-center text-center mb-16 relative z-10">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-foreground flex items-center justify-center">
-                  <BookOpen className="text-background" size={20} />
-                </div>
-                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">Make Me Understand</h1>
+              <div className="mb-6 w-full max-w-md mx-auto px-4">
+                <Signature
+                  text="Make Me Understand"
+                  fontSize={32}
+                  duration={2}
+                  color="currentColor"
+                />
               </div>
               <p className="text-muted-foreground text-base md:text-lg max-w-md mb-8">
                 Upload your study materials. AI will synthesize notes, explain concepts, and help you truly understand.
