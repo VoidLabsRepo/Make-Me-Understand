@@ -9,6 +9,7 @@ Upload your study materials, and let AI turn them into easy-to-understand notes 
 3. **Upload** — snap photos of your notes anytime during a conversation
 4. **Study Spaces** — organize sessions into folders
 5. **AI Notes** — the AI creates formatted notes when you ask it to
+6. **Visual Canvas** — AI generates colored concept boards with definitions, formulas, and flowcharts
 
 ## Features
 
@@ -36,6 +37,13 @@ Upload your study materials, and let AI turn them into easy-to-understand notes 
 - Images compressed and stored permanently
 - Persistent across all conversations
 
+### Visual Canvas
+- Ask the AI to "create a canvas", "visualize this", or "draw a flowchart"
+- 6 element types with auto-assigned colors: Definitions (blue), Formulas (green), Flowcharts (orange), Notes (purple), Examples (pink), Headings (gray)
+- Connected elements with flowchart arrows
+- Interactive — pan, zoom, and explore the concept map
+- Notes and Canvas tabs in the side panel
+
 ## Screenshots
 
 ### Dashboard
@@ -47,9 +55,12 @@ Upload your study materials, and let AI turn them into easy-to-understand notes 
 ### Voice Mode
 ![Voice Mode](screenshots/voice-mode.png)
 
+### Visual Canvas
+![Canvas](https://github.com/VoidLabsRepo/Make-Me-Understand/releases/download/v0.3.7/canvas-release.png)
+
 ## Tech Stack
 
-- **Frontend** — Next.js, React, TypeScript, Tailwind CSS
+- **Frontend** — Next.js, React, TypeScript, Tailwind CSS, React Flow
 - **Backend** — FastAPI, Python, SQLite (aiosqlite)
 - **TTS** — Kokoro-82M (Af-Heart voice)
 - **Animations** — Framer Motion, Rive
