@@ -6,7 +6,7 @@ import re
 import json
 import os
 from database import get_db
-from services.llm import chat_with_context, voice_explain, voice_chat_with_context, clean_voice_text, generate_title
+from services.llm import chat_with_context, voice_explain, voice_chat_with_context, clean_voice_text, generate_title, chat_completion_stream, build_chat_system_prompt
 from services.tts import generate_tts, stream_tts, make_wav_header, get_cache_path, generate_voice_timings
 
 router = APIRouter(prefix="/api/sessions", tags=["chat"])
@@ -32,6 +32,17 @@ async def _fetch_canvases_list(db: aiosqlite.Connection, session_id: int) -> lis
     return [dict(r) for r in await cursor.fetchall()]
 
 
+def _safe_int_id(data: dict, key: str = "id") -> int | None:
+    """Parse an int ID from JSON data. Returns None if missing or invalid."""
+    raw = data.get(key)
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
     """Extract JSON tool calls from ```json code blocks. Returns (cleaned_response, tool_calls)."""
     tool_calls = []
@@ -45,80 +56,55 @@ def _parse_tool_calls(response: str) -> tuple[str, list[dict]]:
             data = json.loads(raw)
             tool = data.get("tool")
             if tool == "note":
-                action = data.get("action")
-                if action == "create":
-                    tool_calls.append({
-                        "action": "create_note",
-                        "title": data.get("title", "Untitled"),
-                        "content": data.get("content", ""),
-                    })
-                elif action == "update":
-                    note_id = data.get("id")
-                    if note_id is not None:
-                        try:
-                            note_id = int(note_id)
-                        except (TypeError, ValueError):
-                            note_id = None
-                        if note_id:
-                            tool_calls.append({
-                                "action": "update_note",
-                                "note_id": note_id,
-                                "content": data.get("content", ""),
-                            })
-                elif action == "delete":
-                    note_id = data.get("id")
-                    if note_id is not None:
-                        try:
-                            note_id = int(note_id)
-                        except (TypeError, ValueError):
-                            note_id = None
-                        if note_id:
-                            tool_calls.append({
-                                "action": "delete_note",
-                                "note_id": note_id,
-                            })
+                tc = _parse_note_tool_call(data)
+                if tc:
+                    tool_calls.append(tc)
             elif tool == "canvas":
-                action = data.get("action")
-                if action == "create":
-                    tool_calls.append({
-                        "action": "create_canvas",
-                        "title": data.get("title", "Untitled"),
-                        "elements": data.get("elements", []),
-                    })
-                elif action == "update":
-                    canvas_id = data.get("id")
-                    if canvas_id is not None:
-                        try:
-                            canvas_id = int(canvas_id)
-                        except (TypeError, ValueError):
-                            canvas_id = None
-                        if canvas_id:
-                            update_kwargs: dict = {"canvas_id": canvas_id}
-                            if "title" in data:
-                                update_kwargs["title"] = data["title"]
-                            if "elements" in data:
-                                update_kwargs["elements"] = data["elements"]
-                            tool_calls.append({
-                                "action": "update_canvas",
-                                **update_kwargs,
-                            })
-                elif action == "delete":
-                    canvas_id = data.get("id")
-                    if canvas_id is not None:
-                        try:
-                            canvas_id = int(canvas_id)
-                        except (TypeError, ValueError):
-                            canvas_id = None
-                        if canvas_id:
-                            tool_calls.append({
-                                "action": "delete_canvas",
-                                "canvas_id": canvas_id,
-                            })
+                tc = _parse_canvas_tool_call(data)
+                if tc:
+                    tool_calls.append(tc)
         except (json.JSONDecodeError, TypeError):
             pass
         # Remove the matched block from response
         clean_response = clean_response.replace(m.group(0), "", 1)
     return clean_response.strip(), tool_calls
+
+
+def _parse_note_tool_call(data: dict) -> dict | None:
+    action = data.get("action")
+    if action == "create":
+        return {
+            "action": "create_note",
+            "title": data.get("title", "Untitled"),
+            "content": data.get("content", ""),
+        }
+    note_id = _safe_int_id(data)
+    if note_id and action == "update":
+        return {"action": "update_note", "note_id": note_id, "content": data.get("content", "")}
+    if note_id and action == "delete":
+        return {"action": "delete_note", "note_id": note_id}
+    return None
+
+
+def _parse_canvas_tool_call(data: dict) -> dict | None:
+    action = data.get("action")
+    if action == "create":
+        return {
+            "action": "create_canvas",
+            "title": data.get("title", "Untitled"),
+            "elements": data.get("elements", []),
+        }
+    canvas_id = _safe_int_id(data)
+    if canvas_id and action == "update":
+        update_kwargs: dict = {"canvas_id": canvas_id}
+        if "title" in data:
+            update_kwargs["title"] = data["title"]
+        if "elements" in data:
+            update_kwargs["elements"] = data["elements"]
+        return {"action": "update_canvas", **update_kwargs}
+    if canvas_id and action == "delete":
+        return {"action": "delete_canvas", "canvas_id": canvas_id}
+    return None
 
 
 def _parse_reasoning(response: str) -> tuple[str, list[dict]]:
@@ -199,6 +185,7 @@ async def _execute_tool_calls(db: aiosqlite.Connection, session_id: int, tool_ca
             if updates:
                 updates.append("updated_at = CURRENT_TIMESTAMP")
                 params.append(tc["canvas_id"])
+                # ponytail: S608 false positive — `updates` keys are hardcoded, not user input
                 await db.execute(
                     f"UPDATE canvases SET {', '.join(updates)} WHERE id = ? AND session_id = ?",
                     [*params, session_id],
@@ -308,9 +295,212 @@ async def chat(
                     await db.execute("UPDATE sessions SET title = ? WHERE id = ?", (new_title, session_id))
                     await db.commit()
             except Exception:
-                pass  # title generation is best-effort
+                pass  # ponytail: title generation is best-effort, never block the response
 
     return {"response": clean_response, "reasoning": reasoning, "note_changes": note_changes, "canvas_changes": canvas_changes}
+
+
+@router.post("/{session_id}/chat/stream")
+async def chat_stream(
+    session_id: int,
+    req: ChatRequest,
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    """Stream chat response via SSE. Events: text, reasoning, canvas, note, done, error."""
+    cursor = await db.execute("SELECT notes, image_context, title FROM sessions WHERE id = ?", (session_id,))
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    notes = row["notes"] or ""
+    raw_image_context = row["image_context"] or ""
+    session_title = row["title"]
+
+    images = []
+    if raw_image_context:
+        try:
+            images = json.loads(raw_image_context)
+        except (json.JSONDecodeError, TypeError):
+            images = []
+
+    existing_notes = await _fetch_notes_list(db, session_id)
+    existing_canvases = await _fetch_canvases_list(db, session_id)
+
+    user_notes_str = ""
+    if existing_notes:
+        user_notes_str = "\n\n## User's Notes\nThe user has created these notes. Use them to answer questions.\n\n"
+        for n in existing_notes:
+            user_notes_str += f"### {n['title']}\n{n['content']}\n\n"
+
+    msg_cursor = await db.execute(
+        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT 20",
+        (session_id,),
+    )
+    rows = await msg_cursor.fetchall()
+    history = [{"role": r["role"], "content": r["content"]} for r in reversed(rows)]
+
+    # Save user message while connection is still alive
+    await db.execute(
+        "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
+        (session_id, "user", req.message),
+    )
+    await db.commit()
+
+    system = build_chat_system_prompt(notes, existing_notes, user_notes_str, existing_canvases)
+
+    if images:
+        user_content = []
+        for img in images:
+            url = "data:" + img["mime"] + ";base64," + img["b64"]
+            user_content.append({"type": "image_url", "image_url": {"url": url}})
+        user_content.append({"type": "text", "text": req.message})
+    else:
+        user_content = req.message
+
+    messages_for_llm = [
+        {"role": "system", "content": system},
+        *history,
+        {"role": "user", "content": user_content},
+    ]
+
+    async def event_generator():
+        import json as _json  # ponytail: scoped import avoids name clash with module-level json
+        from database import DB_PATH  # ponytail: scoped import, connection must outlive Depends
+        full_text = ""
+        reasoning_steps = []
+        executed_tool_call_ids: set[str] = set()
+        note_changes_all: list[dict] = []
+        canvas_changes_all: list[dict] = []
+
+        # Open a fresh DB connection for the generator's lifetime
+        gen_db = await aiosqlite.connect(DB_PATH, timeout=10)
+        gen_db.row_factory = aiosqlite.Row
+
+        try:
+            async for token in chat_completion_stream(messages_for_llm):
+                full_text += token
+
+                # Check for complete tool call blocks
+                tc_pattern = r'```json\s*\n\s*(\{(?!\s*"reasoning")[^`]+?\})\s*\n\s*```'
+                tc_matches = list(re.finditer(tc_pattern, full_text, re.DOTALL))
+                if tc_matches:
+                    for m in tc_matches:
+                        raw = m.group(1).strip()
+                        block_id = m.group(0)
+                        if block_id in executed_tool_call_ids:
+                            continue
+                        try:
+                            data = _json.loads(raw)
+                            tool = data.get("tool")
+                            if tool in ("note", "canvas"):
+                                _, tool_calls = _parse_tool_calls(full_text)
+                                if tool_calls:
+                                    tool_results = await _execute_tool_calls(gen_db, session_id, tool_calls)
+                                    for nc in tool_results.get("note_changes", []):
+                                        note_changes_all.append(nc)
+                                        yield f"event: note\ndata: {_json.dumps(nc)}\n\n"
+                                    for cc in tool_results.get("canvas_changes", []):
+                                        canvas_changes_all.append(cc)
+                                        yield f"event: canvas\ndata: {_json.dumps(cc)}\n\n"
+                                executed_tool_call_ids.add(block_id)
+                                full_text = full_text.replace(m.group(0), "", 1)
+                                break
+                        except (_json.JSONDecodeError, TypeError):
+                            pass
+
+                # Parse and emit reasoning if present
+                if "```json reasoning" in full_text or ('```json\n[' in full_text and '"label"' in full_text):
+                    clean_r, reasoning = _parse_reasoning(full_text)
+                    if reasoning and len(reasoning) > len(reasoning_steps):
+                        reasoning_steps = reasoning
+                        yield f"event: reasoning\ndata: {_json.dumps(reasoning_steps)}\n\n"
+                        full_text = clean_r
+
+                # Stream the text content
+                clean_text = _strip_special_blocks(full_text)
+                if clean_text:
+                    yield f"event: text\ndata: {_json.dumps(clean_text)}\n\n"
+
+            # Final parse after stream completes
+            clean_response = _strip_special_blocks(full_text)
+            clean_response, final_reasoning = _parse_reasoning(clean_response)
+            _, tool_calls = _parse_tool_calls(full_text)
+
+            # Execute any remaining tool calls not caught during streaming
+            if tool_calls:
+                tool_results = await _execute_tool_calls(gen_db, session_id, tool_calls)
+                for nc in tool_results.get("note_changes", []):
+                    note_changes_all.append(nc)
+                    yield f"event: note\ndata: {_json.dumps(nc)}\n\n"
+                for cc in tool_results.get("canvas_changes", []):
+                    canvas_changes_all.append(cc)
+                    yield f"event: canvas\ndata: {_json.dumps(cc)}\n\n"
+
+            # Use reasoning_steps from streaming (more reliable than re-parsing)
+            best_reasoning = final_reasoning if final_reasoning else reasoning_steps
+
+            # Save the clean response
+            await gen_db.execute(
+                "INSERT INTO messages (session_id, role, content, reasoning) VALUES (?, ?, ?, ?)",
+                (session_id, "assistant", clean_response, _json.dumps(best_reasoning)),
+            )
+            await gen_db.commit()
+
+            # Auto-generate title
+            if session_title == "New Session":
+                count_cursor = await gen_db.execute(
+                    "SELECT COUNT(*) as cnt FROM messages WHERE session_id = ? AND role = 'user'",
+                    (session_id,),
+                )
+                count_row = await count_cursor.fetchone()
+                if count_row and count_row["cnt"] >= 5:
+                    all_msgs_cursor = await gen_db.execute(
+                        "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at",
+                        (session_id,),
+                    )
+                    all_msgs = [{"role": r["role"], "content": r["content"]} for r in await all_msgs_cursor.fetchall()]
+                    try:
+                        new_title = await generate_title(all_msgs)
+                        if new_title:
+                            await gen_db.execute("UPDATE sessions SET title = ? WHERE id = ?", (new_title, session_id))
+                            await gen_db.commit()
+                    except Exception:
+                        pass  # ponytail: title generation is best-effort
+
+            done_data = {
+                "response": clean_response,
+                "reasoning": best_reasoning,
+                "note_changes": note_changes_all,
+                "canvas_changes": canvas_changes_all,
+            }
+            yield f"event: done\ndata: {_json.dumps(done_data)}\n\n"
+
+        except Exception as e:
+            print(f"[chat_stream] Error: {e}")
+            import traceback
+            traceback.print_exc()
+            yield f"event: error\ndata: {_json.dumps({'error': str(e)})}\n\n"
+        finally:
+            await gen_db.close()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+def _strip_special_blocks(text: str) -> str:
+    """Remove ```json reasoning blocks and ```json tool call blocks from text for streaming display."""
+    # Remove reasoning blocks
+    text = re.sub(r'```json(?:\s*reasoning)?\s*\n\s*\[[\s\S]*?\]\s*\n\s*```', '', text)
+    # Remove tool call blocks (but not reasoning)
+    text = re.sub(r'```json\s*\n\s*\{(?!\s*"reasoning")[^`]+?\}\s*\n\s*```', '', text)
+    return text.strip()
 
 
 @router.post("/{session_id}/voice-chat")
@@ -427,7 +617,7 @@ async def voice_chat(
                     await db.execute("UPDATE sessions SET title = ? WHERE id = ?", (new_title, session_id))
                     await db.commit()
             except Exception:
-                pass
+                pass  # ponytail: title generation is best-effort
 
     return {"response": response, "reasoning": reasoning, "word_timings": timings, "note_changes": note_changes, "canvas_changes": canvas_changes}
 
