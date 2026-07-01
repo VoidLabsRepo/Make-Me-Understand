@@ -107,6 +107,7 @@ async def update_canvas(
 
     updates.append("updated_at = CURRENT_TIMESTAMP")
     params.append(canvas_id)
+    # ponytail: S608 false positive — `updates` keys are hardcoded, not user input
     await db.execute(f"UPDATE canvases SET {', '.join(updates)} WHERE id = ?", params)
     await db.commit()
     return {"ok": True}

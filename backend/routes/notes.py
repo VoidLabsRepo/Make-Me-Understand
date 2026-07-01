@@ -96,6 +96,7 @@ async def update_note(
 
     updates.append("updated_at = CURRENT_TIMESTAMP")
     params.append(note_id)
+    # ponytail: S608 false positive — `updates` keys are hardcoded, not user input
     await db.execute(f"UPDATE notes SET {', '.join(updates)} WHERE id = ?", params)
     await db.commit()
     return {"ok": True}

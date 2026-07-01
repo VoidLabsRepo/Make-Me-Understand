@@ -1,0 +1,10 @@
+# ponytail: suppress intentional patterns, not code smell
+[lint]
+ignore = [
+    "E402",   # module-level import not at top — load_dotenv() must run first
+    "B008",   # Depends() in function args — standard FastAPI DI pattern
+    "S608",   # SQL injection via f-string — hardcoded keys, not user input
+    "S110",   # try-except-pass — best-effort operations (title gen, cleanup)
+    "PLC0415", # import not at top — lazy GPU/torch imports, intentional
+    "PLW0603", # global statement — lazy singleton for TTS pipeline
+]

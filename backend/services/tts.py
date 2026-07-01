@@ -15,9 +15,9 @@ def get_cache_path(session_id: int) -> str:
 
 
 def _get_pipeline():
-    global _pipeline
+    global _pipeline  # ponytail: lazy singleton, avoids import-time GPU check
     if _pipeline is None:
-        import torch
+        import torch  # ponytail: lazy import, GPU detection at first use only
         device = "cuda" if torch.cuda.is_available() else "cpu"
         _pipeline = KPipeline(lang_code="a", device=device)
     return _pipeline
@@ -30,10 +30,9 @@ async def generate_tts(text: str) -> bytes:
 
     all_audio = []
     for _, _, audio in generator:
-        import torch
-        if isinstance(audio, torch.Tensor):
-            audio = audio.cpu().numpy()
-        all_audio.append(audio)
+        import torch  # ponytail: lazy import for Tensor→ndarray conversion
+        arr = audio.cpu().numpy() if isinstance(audio, torch.Tensor) else audio
+        all_audio.append(arr)
 
     combined = np.concatenate(all_audio)
 
@@ -53,13 +52,12 @@ async def generate_voice_timings(text: str) -> tuple[bytes, list[dict]]:
     current_time = 0.0
 
     for gs, _, audio in generator:
-        import torch
-        if isinstance(audio, torch.Tensor):
-            audio = audio.cpu().numpy()
-        all_audio.append(audio)
+        import torch  # ponytail: lazy import for Tensor→ndarray conversion
+        arr = audio.cpu().numpy() if isinstance(audio, torch.Tensor) else audio
+        all_audio.append(arr)
 
         # Calculate exact duration in seconds for this chunk
-        chunk_duration = len(audio) / 24000.0
+        chunk_duration = len(arr) / 24000.0
 
         # Extract words from the grapheme string
         words = [w for w in gs.split() if w.strip()]
@@ -111,8 +109,7 @@ async def stream_tts(text: str):
     pipeline = _get_pipeline()
     generator = pipeline(text, voice="af_heart")
     for _, _, audio in generator:
-        import torch
-        if isinstance(audio, torch.Tensor):
-            audio = audio.cpu().numpy()
-        pcm_data = (audio * 32767).astype(np.int16).tobytes()
+        import torch  # ponytail: lazy import for Tensor→ndarray conversion
+        arr = audio.cpu().numpy() if isinstance(audio, torch.Tensor) else audio
+        pcm_data = (arr * 32767).astype(np.int16).tobytes()
         yield pcm_data

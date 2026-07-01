@@ -1,5 +1,4 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import aiosqlite
 import base64
@@ -54,7 +53,7 @@ async def process_append_images_background(session_id: int, image_bytes: list[by
             )
             await db.commit()
         print(f"[append-images] Stored {len(image_bytes)} compressed images for session {session_id}")
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
 
 
@@ -351,5 +350,5 @@ async def cleanup_expired_backups():
             )
             await backup.commit()
     except Exception:
-        pass
+        pass  # ponytail: cleanup is best-effort, never block startup
 

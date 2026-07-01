@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
-load_dotenv()
+import os as _os
+load_dotenv(_os.path.join(_os.path.dirname(__file__), ".env"))
 
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
