@@ -39,8 +39,8 @@ export function NotesPanel({ sessionId, refreshTrigger, isMobile, onClose }: Not
       if (data.length > 0 && !data.find((n) => n.id === activeId)) {
         setActiveId(data[0].id);
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to load notes:", e);
     } finally {
       setLoading(false);
     }
@@ -91,8 +91,8 @@ export function NotesPanel({ sessionId, refreshTrigger, isMobile, onClose }: Not
       setActiveId(note.id);
       setEditing(note.id);
       setEditContent("");
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to create note:", e);
     }
   };
 
@@ -103,8 +103,8 @@ export function NotesPanel({ sessionId, refreshTrigger, isMobile, onClose }: Not
       if (activeId === id) {
         setActiveId(notes.find((n) => n.id !== id)?.id ?? null);
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to delete note:", e);
     }
   };
 
@@ -115,8 +115,8 @@ export function NotesPanel({ sessionId, refreshTrigger, isMobile, onClose }: Not
       await updateNote(id, { content: editContent });
       setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, content: editContent } : n)));
       setEditing(null);
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to save note:", e);
     }
   };
 
@@ -125,8 +125,8 @@ export function NotesPanel({ sessionId, refreshTrigger, isMobile, onClose }: Not
     try {
       await updateNote(id, { title });
       setNotes((prev) => prev.map((n) => (n.id === id ? { ...n, title } : n)));
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to rename note:", e);
     }
   };
 

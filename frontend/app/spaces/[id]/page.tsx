@@ -33,7 +33,8 @@ export default function SpaceDetailPage() {
       ]);
       setSpace(spaceData);
       setAllSessions(sessionsData);
-    } catch {
+    } catch (e) {
+      console.error("Failed to load space:", e);
       router.push("/");
     } finally {
       setLoading(false);
@@ -58,8 +59,8 @@ export default function SpaceDetailPage() {
           session_count: space.session_count + 1,
         });
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to add session to space:", e);
     }
   };
 
@@ -73,8 +74,8 @@ export default function SpaceDetailPage() {
           session_count: space.session_count - 1,
         });
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to remove session from space:", e);
     }
   };
 

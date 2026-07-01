@@ -14,15 +14,23 @@ interface VoiceModeProps {
   notes: string;
   onClose: () => void;
   onNoteChange?: () => void;
+  initialMessages?: { id: number; role: string; content: string }[];
 }
 
-export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceModeProps) {
+interface ChatMessage {
+  id: number;
+  role: string;
+  content: string;
+}
+
+export function VoiceMode({ sessionId, notes, onClose, onNoteChange, initialMessages = [] }: VoiceModeProps) {
   const [personaState, setPersonaState] = useState<PersonaState>("idle");
   const [transcript, setTranscript] = useState("");
   const [aiSubtitle, setAiSubtitle] = useState("");
   const [wordTimings, setWordTimings] = useState<WordTiming[]>([]);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialMessages.slice(-10));
 
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -111,6 +119,13 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
 
       setAiSubtitle(responseText);
       setWordTimings(word_timings);
+
+      // Add user message and AI response to local chat
+      setChatMessages((prev) => [
+        ...prev,
+        { id: Date.now(), role: "user", content: question },
+        { id: Date.now() + 1, role: "assistant", content: responseText },
+      ]);
 
       // Notify parent if notes or canvases were changed
       if (note_changes?.length || canvas_changes?.length) {
@@ -332,6 +347,23 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
               <div style={{ opacity: subtitleBottomOpacity }} className="pointer-events-none transition-opacity duration-150">
                 <ProgressiveBlur position="bottom" backgroundColor="#f0f0f0" height="100px" blurAmount="6px" />
               </div>
+            </div>
+          )}
+
+          {/* Mini chat history */}
+          {chatMessages.length > 0 && (
+            <div className="w-full max-w-lg space-y-2 px-4 max-h-[180px] overflow-y-auto">
+              {chatMessages.slice(-6).map((msg) => (
+                <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[85%] rounded-xl px-3 py-1.5 text-xs leading-relaxed ${
+                    msg.role === "user"
+                      ? "bg-foreground text-background"
+                      : "bg-white/80 text-slate-700 border"
+                  }`}>
+                    {msg.content.length > 150 ? msg.content.slice(0, 150) + "..." : msg.content}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

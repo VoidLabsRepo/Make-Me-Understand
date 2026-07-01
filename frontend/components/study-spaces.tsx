@@ -40,8 +40,8 @@ export function StudySpaces({ onCreated, showCreate, onCreateVisible }: { onCrea
     try {
       const data = await listStudySpaces();
       setSpaces(data);
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to load study spaces:", e);
     } finally {
       setLoading(false);
     }
@@ -77,8 +77,8 @@ export function StudySpaces({ onCreated, showCreate, onCreateVisible }: { onCrea
       setNewName("");
       setShowInput(false);
       onCreated?.();
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to create study space:", e);
     } finally {
       setCreating(false);
     }
@@ -90,8 +90,8 @@ export function StudySpaces({ onCreated, showCreate, onCreateVisible }: { onCrea
     try {
       await renameStudySpace(id, name);
       setSpaces((prev) => prev.map((s) => (s.id === id ? { ...s, name } : s)));
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to rename study space:", e);
     } finally {
       setRenamingId(null);
     }
@@ -101,8 +101,8 @@ export function StudySpaces({ onCreated, showCreate, onCreateVisible }: { onCrea
     try {
       await deleteStudySpace(id);
       setSpaces((prev) => prev.filter((s) => s.id !== id));
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to delete study space:", e);
     } finally {
       setDeletingId(null);
     }

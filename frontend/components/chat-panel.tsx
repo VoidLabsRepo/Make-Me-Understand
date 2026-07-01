@@ -5,7 +5,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { motion, AnimatePresence } from "motion/react";
 import { bounce } from "@/lib/animations";
-import { sendMessage, appendImages, getMessages, type ReasoningStep } from "@/lib/api";
+import { sendMessageStream, sendMessage, appendImages, getMessages, type ReasoningStep } from "@/lib/api";
 import { Persona } from "@/components/ai-elements/persona";
 import { ThinkingIndicator } from "@/components/ui/thinking-indicator";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
@@ -143,6 +143,35 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
     });
   }, []);
 
+  // ponytail: fallback helper, kills 28-line duplication in handleSend
+  const fallbackToSync = async (msg: string, assistantId: number) => {
+    try {
+      const result = await sendMessage(sessionId, msg);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? {
+                ...m,
+                content: result.response || "No response.",
+                reasoning: result.reasoning?.length ? result.reasoning : m.reasoning,
+              }
+            : m
+        )
+      );
+      if (result.note_changes?.length || result.canvas_changes?.length) {
+        onNoteChange?.();
+      }
+    } catch {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? { ...m, content: "Failed to get response. Try again." }
+            : m
+        )
+      );
+    }
+  };
+
   const handleSend = async (text?: string) => {
     const msg = (text ?? input).trim();
     const hasImages = attachments.length > 0;
@@ -177,32 +206,66 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
         .finally(() => setUploading(false));
     }
 
-    // If there's also a text message, send it as chat
+    // If there's also a text message, send it as streaming chat
     if (msg) {
       setInput("");
-      setMessages((prev) => [...prev, { id: synthId(), role: "user", content: msg }]);
+      const msgId = synthId();
+      setMessages((prev) => [...prev, { id: msgId, role: "user", content: msg }]);
       setLoading(true);
 
+      // Add a placeholder assistant message that will be updated by streaming
+      const assistantId = synthId();
+      setMessages((prev) => [
+        ...prev,
+        { id: assistantId, role: "assistant", content: "", reasoning: [] },
+      ]);
+
+      let accumulatedText = "";
+      let accumulatedReasoning: ReasoningStep[] = [];
+
       try {
-        const data = await sendMessage(sessionId, msg);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: synthId(),
-            role: "assistant",
-            content: data.response,
-            reasoning: data.reasoning,
-          },
-        ]);
-        if (data.note_changes?.length || data.canvas_changes?.length) {
-          onNoteChange?.();
+        for await (const event of sendMessageStream(sessionId, msg)) {
+          if (event.type === "text") {
+            accumulatedText = event.data;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: accumulatedText } : m
+              )
+            );
+          } else if (event.type === "reasoning") {
+            accumulatedReasoning = event.data;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, reasoning: accumulatedReasoning } : m
+              )
+            );
+          } else if (event.type === "canvas" || event.type === "note") {
+            onNoteChange?.();
+          } else if (event.type === "done") {
+            const done = event.data;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? {
+                      ...m,
+                      content: done.response || m.content || accumulatedText,
+                      reasoning: done.reasoning?.length ? done.reasoning : m.reasoning,
+                    }
+                  : m
+              )
+            );
+            if (done.note_changes?.length || done.canvas_changes?.length) {
+              onNoteChange?.();
+            }
+          } else if (event.type === "error") {
+            // Streaming failed — fall back to non-streaming
+            console.warn("[chat] Stream error, falling back to non-streaming:", event.data);
+            await fallbackToSync(msg, assistantId);
+          }
         }
       } catch (e: any) {
-        console.error("[chat] sendMessage failed:", e?.name, e?.message);
-        setMessages((prev) => [
-          ...prev,
-          { id: synthId(), role: "assistant", content: "Failed to get response. Try again." },
-        ]);
+        console.error("[chat] sendMessageStream failed:", e?.name, e?.message);
+        await fallbackToSync(msg, assistantId);
       } finally {
         setLoading(false);
       }

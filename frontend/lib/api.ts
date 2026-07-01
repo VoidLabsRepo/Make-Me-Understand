@@ -1,5 +1,25 @@
 const API_BASE = "";
 
+// ponytail: fetch + 120s abort, kills 3x AbortController boilerplate
+async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 120_000);
+  try {
+    const res = await fetch(url, { ...init, signal: ac.signal });
+    clearTimeout(t);
+    return res;
+  } catch (e) {
+    clearTimeout(t);
+    throw e;
+  }
+}
+
+// ponytail: check response + throw with status, kills 15 identical if/throw blocks
+function checkOk(res: Response, msg: string): Response {
+  if (!res.ok) throw new Error(`${msg} (${res.status})`);
+  return res;
+}
+
 export interface Session {
   id: number;
   title: string;
@@ -25,20 +45,17 @@ export async function createSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title: title || "New Session" }),
   });
-  if (!res.ok) throw new Error("Failed to create session");
-  return res.json();
+  return checkOk(res, "create session").json();
 }
 
 export async function listSessions(): Promise<SessionListItem[]> {
   const res = await fetch(`${API_BASE}/api/sessions`);
-  if (!res.ok) throw new Error("Failed to list sessions");
-  return res.json();
+  return checkOk(res, "list sessions").json();
 }
 
 export async function getSession(id: number): Promise<Session> {
   const res = await fetch(`${API_BASE}/api/sessions/${id}`);
-  if (!res.ok) throw new Error("Failed to get session");
-  return res.json();
+  return checkOk(res, "get session").json();
 }
 
 export async function getMessages(
@@ -50,8 +67,7 @@ export async function getMessages(
   if (beforeId != null) params.set("before", String(beforeId));
   params.set("limit", String(limit));
   const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages?${params}`);
-  if (!res.ok) throw new Error("Failed to get messages");
-  return res.json();
+  return checkOk(res, "get messages").json();
 }
 
 export interface ReasoningStep {
@@ -69,19 +85,59 @@ export async function sendMessage(
   note_changes: NoteChange[];
   canvas_changes: CanvasChange[];
 }> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
-  try {
-    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error("Failed to send message");
-    return res.json();
-  } finally {
-    clearTimeout(timeout);
+  const res = await fetchWithTimeout(`${API_BASE}/api/sessions/${sessionId}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  return checkOk(res, "send message").json();
+}
+
+export interface StreamEvent {
+  type: "text" | "reasoning" | "canvas" | "note" | "done" | "error";
+  data: any;
+}
+
+export async function* sendMessageStream(
+  sessionId: number,
+  message: string,
+): AsyncGenerator<StreamEvent, void, unknown> {
+  const res = await fetchWithTimeout(`${API_BASE}/api/sessions/${sessionId}/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  checkOk(res, "stream message");
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    let eventType = "";
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        eventType = line.slice(7).trim();
+      } else if (line.startsWith("data: ")) {
+        const raw = line.slice(6);
+        try {
+          const data = JSON.parse(raw);
+          yield { type: (eventType || "text") as StreamEvent["type"], data };
+        } catch {
+          // partial JSON, skip
+        }
+      } else if (line.trim() === "") {
+        // Empty line resets event type (SSE spec)
+        eventType = "";
+      }
+    }
   }
 }
 
@@ -100,30 +156,12 @@ export interface VoiceResponse {
 }
 
 export async function sendVoiceMessage(sessionId: number, message: string): Promise<VoiceResponse> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
-  try {
-    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/voice-chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error("Failed to send voice message");
-    return res.json();
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-export async function generateTTS(sessionId: number, question: string): Promise<Blob> {
-  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/tts`, {
+  const res = await fetchWithTimeout(`${API_BASE}/api/sessions/${sessionId}/voice-chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ message }),
   });
-  if (!res.ok) throw new Error("Failed to generate TTS");
-  return res.blob();
+  return checkOk(res, "send voice message").json();
 }
 
 export async function appendImages(sessionId: number, files: File[]): Promise<string | null> {
@@ -135,8 +173,7 @@ export async function appendImages(sessionId: number, files: File[]): Promise<st
     method: "POST",
     body: form,
   });
-  if (!res.ok) throw new Error("Failed to append images");
-  const data = await res.json();
+  const data = await checkOk(res, "append images").json();
   return data.notes;
 }
 
@@ -146,36 +183,14 @@ export async function renameSession(id: number, title: string): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
   });
-  if (!res.ok) throw new Error("Failed to rename session");
+  checkOk(res, "rename session");
 }
 
 export async function deleteSession(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/sessions/${id}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error("Failed to delete session");
-}
-
-export interface DeletedSession {
-  original_id: number;
-  title: string;
-  created_at: string;
-  deleted_at: string;
-  expires_at: string;
-}
-
-export async function listDeletedSessions(): Promise<DeletedSession[]> {
-  const res = await fetch(`${API_BASE}/api/sessions/deleted`);
-  if (!res.ok) throw new Error("Failed to list deleted sessions");
-  return res.json();
-}
-
-export async function restoreSession(originalId: number): Promise<{ id: number; title: string }> {
-  const res = await fetch(`${API_BASE}/api/sessions/restore/${originalId}`, {
-    method: "POST",
-  });
-  if (!res.ok) throw new Error("Failed to restore session");
-  return res.json();
+  checkOk(res, "delete session");
 }
 
 export interface Note {
@@ -195,14 +210,12 @@ export interface NoteChange {
 
 export async function listNotes(sessionId: number): Promise<Note[]> {
   const res = await fetch(`${API_BASE}/api/notes/session/${sessionId}`);
-  if (!res.ok) throw new Error("Failed to list notes");
-  return res.json();
+  return checkOk(res, "list notes").json();
 }
 
 export async function getNote(noteId: number): Promise<Note> {
   const res = await fetch(`${API_BASE}/api/notes/${noteId}`);
-  if (!res.ok) throw new Error("Failed to get note");
-  return res.json();
+  return checkOk(res, "get note").json();
 }
 
 export async function createNote(sessionId: number, title: string, content: string): Promise<Note> {
@@ -211,8 +224,7 @@ export async function createNote(sessionId: number, title: string, content: stri
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, title, content }),
   });
-  if (!res.ok) throw new Error("Failed to create note");
-  return res.json();
+  return checkOk(res, "create note").json();
 }
 
 export async function updateNote(noteId: number, data: { title?: string; content?: string }): Promise<void> {
@@ -221,14 +233,14 @@ export async function updateNote(noteId: number, data: { title?: string; content
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Failed to update note");
+  checkOk(res, "update note");
 }
 
 export async function deleteNote(noteId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/notes/${noteId}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error("Failed to delete note");
+  checkOk(res, "delete note");
 }
 
 // Canvas
@@ -262,14 +274,12 @@ export interface CanvasChange {
 
 export async function listCanvases(sessionId: number): Promise<Canvas[]> {
   const res = await fetch(`${API_BASE}/api/canvases/session/${sessionId}`);
-  if (!res.ok) throw new Error("Failed to list canvases");
-  return res.json();
+  return checkOk(res, "list canvases").json();
 }
 
 export async function getCanvas(canvasId: number): Promise<Canvas> {
   const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`);
-  if (!res.ok) throw new Error("Failed to get canvas");
-  return res.json();
+  return checkOk(res, "get canvas").json();
 }
 
 export async function createCanvas(sessionId: number, title: string, elements: CanvasElement[]): Promise<Canvas> {
@@ -278,8 +288,7 @@ export async function createCanvas(sessionId: number, title: string, elements: C
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId, title, elements }),
   });
-  if (!res.ok) throw new Error("Failed to create canvas");
-  return res.json();
+  return checkOk(res, "create canvas").json();
 }
 
 export async function updateCanvas(canvasId: number, data: { title?: string; elements?: CanvasElement[] }): Promise<void> {
@@ -288,14 +297,14 @@ export async function updateCanvas(canvasId: number, data: { title?: string; ele
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Failed to update canvas");
+  checkOk(res, "update canvas");
 }
 
 export async function deleteCanvas(canvasId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error("Failed to delete canvas");
+  checkOk(res, "delete canvas");
 }
 
 // Study Spaces
@@ -315,14 +324,12 @@ export interface StudySpaceDetail extends StudySpace {
 
 export async function listStudySpaces(): Promise<StudySpace[]> {
   const res = await fetch(`${API_BASE}/api/study-spaces`);
-  if (!res.ok) throw new Error("Failed to list study spaces");
-  return res.json();
+  return checkOk(res, "list study spaces").json();
 }
 
 export async function getStudySpace(id: number): Promise<StudySpaceDetail> {
   const res = await fetch(`${API_BASE}/api/study-spaces/${id}`);
-  if (!res.ok) throw new Error("Failed to get study space");
-  return res.json();
+  return checkOk(res, "get study space").json();
 }
 
 export async function createStudySpace(name: string, emoji: string = ""): Promise<StudySpace> {
@@ -331,8 +338,7 @@ export async function createStudySpace(name: string, emoji: string = ""): Promis
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, emoji }),
   });
-  if (!res.ok) throw new Error("Failed to create study space");
-  return res.json();
+  return checkOk(res, "create study space").json();
 }
 
 export async function renameStudySpace(id: number, name: string, emoji: string = ""): Promise<void> {
@@ -341,14 +347,14 @@ export async function renameStudySpace(id: number, name: string, emoji: string =
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, emoji }),
   });
-  if (!res.ok) throw new Error("Failed to rename study space");
+  checkOk(res, "rename study space");
 }
 
 export async function deleteStudySpace(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/study-spaces/${id}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error("Failed to delete study space");
+  checkOk(res, "delete study space");
 }
 
 export async function addSessionToSpace(spaceId: number, sessionId: number): Promise<void> {
@@ -357,13 +363,13 @@ export async function addSessionToSpace(spaceId: number, sessionId: number): Pro
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: sessionId }),
   });
-  if (!res.ok) throw new Error("Failed to add session to space");
+  checkOk(res, "add session to space");
 }
 
 export async function removeSessionFromSpace(spaceId: number, sessionId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/study-spaces/${spaceId}/sessions/${sessionId}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error("Failed to remove session from space");
+  checkOk(res, "remove session from space");
 }
 

@@ -51,8 +51,8 @@ export function CanvasPanel({ sessionId, refreshTrigger }: CanvasPanelProps) {
       if (data.length > 0 && !data.find((c) => c.id === activeId)) {
         setActiveId(data[0].id);
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to load canvases:", e);
     } finally {
       setLoading(false);
     }
@@ -104,8 +104,8 @@ export function CanvasPanel({ sessionId, refreshTrigger }: CanvasPanelProps) {
       const canvas = await createCanvas(sessionId, "Untitled Canvas", []);
       setCanvases((prev) => [...prev, canvas]);
       setActiveId(canvas.id);
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to create canvas:", e);
     }
   };
 
@@ -117,8 +117,8 @@ export function CanvasPanel({ sessionId, refreshTrigger }: CanvasPanelProps) {
       if (activeId === id) {
         setActiveId(canvases.find((c) => c.id !== id)?.id ?? null);
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to delete canvas:", e);
     }
   };
 
@@ -127,8 +127,8 @@ export function CanvasPanel({ sessionId, refreshTrigger }: CanvasPanelProps) {
     try {
       await updateCanvas(id, { title });
       setCanvases((prev) => prev.map((c) => (c.id === id ? { ...c, title } : c)));
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to rename canvas:", e);
     }
   };
 

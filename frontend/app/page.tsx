@@ -88,8 +88,8 @@ export default function Dashboard() {
     try {
       await deleteSession(id);
       setSessions((prev) => prev.filter((s) => s.id !== id));
-    } catch {
-      // ignore
+    } catch (e) {
+      console.error("Failed to delete session:", e);
     } finally {
       setDeletingId(null);
     }
