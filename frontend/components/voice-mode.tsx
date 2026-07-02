@@ -95,6 +95,7 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
   }, [killAudio]);
 
   const speakResponse = useCallback(async (question: string) => {
+    console.log("[voice] speakResponse called with:", question);
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -106,10 +107,11 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
       setWordTimings([]);
 
       // 1. Fetch LLM response first to get subtitle text & save chat messages
+      console.log("[voice] Sending voice message to backend...");
       const { response: responseText, word_timings, note_changes, canvas_changes } = await sendVoiceMessage(sessionId, question);
       if (controller.signal.aborted) return;
 
-      console.log("[voice] got response, word_timings:", word_timings.length);
+      console.log("[voice] got response, word_timings:", word_timings.length, "response length:", responseText.length);
       setAiSubtitle(responseText);
       setWordTimings(word_timings);
 
@@ -125,6 +127,7 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
       audioRef.current = audio;
 
       audio.onplaying = () => {
+        console.log("[voice] audio.onplaying fired");
         if (!controller.signal.aborted) {
           setPersonaState("speaking");
         }
@@ -137,26 +140,31 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
       };
 
       audio.onloadedmetadata = () => {
+        console.log("[voice] audio.onloadedmetadata, duration:", audio.duration);
         if (!controller.signal.aborted) {
           setAudioDuration(audio.duration || 0);
         }
       };
 
       audio.onended = () => {
+        console.log("[voice] audio.onended");
         killAudio();
         setPersonaState("idle");
       };
 
       audio.onerror = (e) => {
         console.error("[voice] audio error:", e);
+        console.error("[voice] audio.error code:", audio.error?.code, "message:", audio.error?.message);
         killAudio();
         setPersonaState("idle");
       };
 
+      console.log("[voice] Calling audio.play()...");
       await audio.play();
       console.log("[voice] audio.play() succeeded");
     } catch (err: any) {
       console.error("[voice] speakResponse failed:", err?.name, err?.message);
+      console.error("[voice] error stack:", err?.stack);
       if (err.name !== "AbortError") {
         setAiSubtitle("Sorry, something went wrong. Please try again.");
         setPersonaState("idle");

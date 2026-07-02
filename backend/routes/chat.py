@@ -509,10 +509,12 @@ async def voice_chat(
     req: ChatRequest,
     db: aiosqlite.Connection = Depends(get_db),
 ):
+    print(f"[voice_chat] Starting for session {session_id}, message: {req.message[:50]}...")
     # Get session data
     cursor = await db.execute("SELECT notes, image_context, title FROM sessions WHERE id = ?", (session_id,))
     row = await cursor.fetchone()
     if not row:
+        print(f"[voice_chat] Session {session_id} not found")
         raise HTTPException(status_code=404, detail="Session not found")
 
     notes = row["notes"] or ""
@@ -524,6 +526,7 @@ async def voice_chat(
     if raw_image_context:
         try:
             images = json.loads(raw_image_context)
+            print(f"[voice_chat] Found {len(images)} images in session")
         except (json.JSONDecodeError, TypeError):
             images = []
 
@@ -557,19 +560,36 @@ async def voice_chat(
 
     # Get voice-friendly AI response — images sent as multimodal content
     try:
+        print(f"[voice_chat] Calling LLM with {len(history)} history messages")
         raw_response = await voice_chat_with_context(
             notes, history, req.message,
             existing_notes=existing_notes, user_notes=user_notes_str,
             images=images if images else None,
             existing_canvases=existing_canvases,
         )
+        print(f"[voice_chat] LLM response received: {len(raw_response)} chars")
     except Exception as e:
-        print(f"[voice_chat] LLM failed: {e}")
+        print(f"[voice_chat] LLM failed: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         response = "Sorry, I'm having trouble connecting right now. Please try again."
-        wav_bytes, timings = await generate_voice_timings(response)
-        cache_path = get_cache_path(session_id)
-        with open(cache_path, "wb") as f:
-            f.write(wav_bytes)
+        try:
+            print(f"[voice_chat] Generating fallback TTS for error message")
+            wav_bytes, timings = await generate_voice_timings(response)
+            cache_path = get_cache_path(session_id)
+            with open(cache_path, "wb") as f:
+                f.write(wav_bytes)
+            print(f"[voice_chat] Fallback TTS cached: {len(wav_bytes)} bytes")
+        except Exception as tts_err:
+            print(f"[voice_chat] TTS generation failed: {tts_err}")
+            traceback.print_exc()
+            return {
+                "response": response,
+                "reasoning": [],
+                "word_timings": [],
+                "note_changes": [],
+                "canvas_changes": [],
+            }
         return {
             "response": response,
             "reasoning": [],
@@ -599,12 +619,33 @@ async def voice_chat(
             response = "I'm not sure what to say. Could you repeat that?"
 
     # Generate audio and word timings
-    wav_bytes, timings = await generate_voice_timings(response)
+    try:
+        print(f"[voice_chat] Generating TTS for response: {response[:100]}...")
+        wav_bytes, timings = await generate_voice_timings(response)
+        print(f"[voice_chat] TTS generated: {len(wav_bytes)} bytes, {len(timings)} word timings")
+    except Exception as e:
+        print(f"[voice_chat] TTS generation failed: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        # Return response without audio
+        await db.execute(
+            "INSERT INTO messages (session_id, role, content, reasoning) VALUES (?, ?, ?, ?)",
+            (session_id, "assistant", response, json.dumps(reasoning)),
+        )
+        await db.commit()
+        return {
+            "response": response,
+            "reasoning": reasoning,
+            "word_timings": [],
+            "note_changes": note_changes,
+            "canvas_changes": canvas_changes,
+        }
 
     # Cache the audio bytes on disk
     cache_path = get_cache_path(session_id)
     with open(cache_path, "wb") as f:
         f.write(wav_bytes)
+    print(f"[voice_chat] Audio cached at {cache_path}")
 
     # Save AI response
     await db.execute(
@@ -677,9 +718,12 @@ async def tts_get(
     text: str | None = None,
     db: aiosqlite.Connection = Depends(get_db),
 ):
+    print(f"[tts_get] Request for session {session_id}, question={question}, text={text}")
     # 1. If cached WAV file exists, stream it immediately
     cache_path = get_cache_path(session_id)
     if os.path.exists(cache_path):
+        file_size = os.path.getsize(cache_path)
+        print(f"[tts_get] Serving cached audio: {cache_path} ({file_size} bytes)")
         def iter_file():
             with open(cache_path, "rb") as f:
                 yield f.read()
@@ -688,6 +732,8 @@ async def tts_get(
             media_type="audio/wav",
             headers={"Content-Disposition": "attachment; filename=tts.wav"},
         )
+
+    print(f"[tts_get] No cache found at {cache_path}, generating dynamically")
 
     # 2. Fallback to dynamic generation
     cursor = await db.execute("SELECT notes FROM sessions WHERE id = ?", (session_id,))
