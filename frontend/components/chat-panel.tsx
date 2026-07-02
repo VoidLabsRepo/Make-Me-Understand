@@ -517,7 +517,7 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.9, y: 4 }}
                       transition={{ duration: 0.12 }}
-                      className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col gap-1 bg-white rounded-2xl shadow-lg border border-border/40 p-1.5 min-w-[120px]"
+                      className="absolute bottom-10 left-0 flex flex-col gap-1 bg-white rounded-2xl shadow-lg border border-border/40 p-1.5 min-w-[120px]"
                     >
                       <button
                         type="button"
