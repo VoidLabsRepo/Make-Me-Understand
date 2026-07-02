@@ -8,15 +8,19 @@ async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Re
     const res = await fetch(url, { ...init, signal: ac.signal });
     clearTimeout(t);
     return res;
-  } catch (e) {
+  } catch (e: any) {
     clearTimeout(t);
+    console.error(`[api] fetch failed: ${init.method || "GET"} ${url}`, e?.name || e);
     throw e;
   }
 }
 
 // ponytail: check response + throw with status, kills 15 identical if/throw blocks
 function checkOk(res: Response, msg: string): Response {
-  if (!res.ok) throw new Error(`${msg} (${res.status})`);
+  if (!res.ok) {
+    console.error(`[api] ${msg} failed: ${res.status}`);
+    throw new Error(`${msg} (${res.status})`);
+  }
   return res;
 }
 
@@ -90,6 +94,7 @@ export async function sendMessage(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
   });
+  console.log("[api] sendMessage:", res.status);
   return checkOk(res, "send message").json();
 }
 
@@ -107,6 +112,7 @@ export async function* sendMessageStream(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
   });
+  console.log("[api] sendMessageStream:", res.status);
   checkOk(res, "stream message");
 
   const reader = res.body!.getReader();
@@ -161,6 +167,7 @@ export async function sendVoiceMessage(sessionId: number, message: string): Prom
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
   });
+  console.log("[api] sendVoiceMessage:", res.status);
   return checkOk(res, "send voice message").json();
 }
 
@@ -219,6 +226,7 @@ export async function getNote(noteId: number): Promise<Note> {
 }
 
 export async function createNote(sessionId: number, title: string, content: string): Promise<Note> {
+  console.log("[api] createNote:", title);
   const res = await fetch(`${API_BASE}/api/notes`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -228,6 +236,7 @@ export async function createNote(sessionId: number, title: string, content: stri
 }
 
 export async function updateNote(noteId: number, data: { title?: string; content?: string }): Promise<void> {
+  console.log("[api] updateNote:", noteId);
   const res = await fetch(`${API_BASE}/api/notes/${noteId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -237,6 +246,7 @@ export async function updateNote(noteId: number, data: { title?: string; content
 }
 
 export async function deleteNote(noteId: number): Promise<void> {
+  console.log("[api] deleteNote:", noteId);
   const res = await fetch(`${API_BASE}/api/notes/${noteId}`, {
     method: "DELETE",
   });
@@ -283,6 +293,7 @@ export async function getCanvas(canvasId: number): Promise<Canvas> {
 }
 
 export async function createCanvas(sessionId: number, title: string, elements: CanvasElement[]): Promise<Canvas> {
+  console.log("[api] createCanvas:", title, elements.length, "elements");
   const res = await fetch(`${API_BASE}/api/canvases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -292,6 +303,7 @@ export async function createCanvas(sessionId: number, title: string, elements: C
 }
 
 export async function updateCanvas(canvasId: number, data: { title?: string; elements?: CanvasElement[] }): Promise<void> {
+  console.log("[api] updateCanvas:", canvasId);
   const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -301,6 +313,7 @@ export async function updateCanvas(canvasId: number, data: { title?: string; ele
 }
 
 export async function deleteCanvas(canvasId: number): Promise<void> {
+  console.log("[api] deleteCanvas:", canvasId);
   const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`, {
     method: "DELETE",
   });
