@@ -3,7 +3,7 @@ const API_BASE = "";
 // ponytail: fetch + 120s abort, kills 3x AbortController boilerplate
 async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), 120_000);
+  const t = setTimeout(() => ac.abort(), 240_000);
   try {
     const res = await fetch(url, { ...init, signal: ac.signal });
     clearTimeout(t);
