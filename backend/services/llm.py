@@ -27,6 +27,19 @@ def _make_headers() -> dict:
     }
 
 
+def _strip_images(messages: list[dict]) -> list[dict]:
+    """Remove image content from messages for non-multimodal fallback models."""
+    cleaned = []
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            text_parts = [p["text"] for p in content if p.get("type") == "text"]
+            cleaned.append({**msg, "content": " ".join(text_parts)})
+        else:
+            cleaned.append(msg)
+    return cleaned
+
+
 async def _post_with_retry(payload: dict, retries: int = MAX_RETRIES) -> httpx.Response:
     """POST with exponential backoff retry for transient errors."""
     last_exc = None
@@ -38,8 +51,8 @@ async def _post_with_retry(payload: dict, retries: int = MAX_RETRIES) -> httpx.R
                 json=payload,
             )
             if resp.status_code == 429:
-                # Rate limit — try fallback model immediately
-                fb_payload = {**payload, "model": FALLBACK_MODEL}
+                # Rate limit — try fallback model immediately (strip images for non-multimodal)
+                fb_payload = {**payload, "model": FALLBACK_MODEL, "messages": _strip_images(payload.get("messages", []))}
                 print(f"API 429 on {payload.get('model')}, falling back to {FALLBACK_MODEL}")
                 resp = await _http_client.post(
                     f"{OPENCODE_BASE_URL}/chat/completions",
@@ -79,12 +92,12 @@ async def chat_completion_stream(messages: list[dict]) -> AsyncGenerator[str, No
     """Stream LLM response token by token. Yields content deltas."""
     payload = {"model": MODEL, "messages": messages, "stream": True}
 
-    async def _open_stream(model: str) -> httpx.Response:
+    async def _open_stream(model: str, msgs: list[dict] | None = None) -> httpx.Response:
         req = _http_client.build_request(
             "POST",
             f"{OPENCODE_BASE_URL}/chat/completions",
             headers=_make_headers(),
-            json={**payload, "model": model},
+            json={**payload, "model": model, "messages": msgs or payload["messages"]},
         )
         return await _http_client.send(req, stream=True)
 
@@ -93,7 +106,7 @@ async def chat_completion_stream(messages: list[dict]) -> AsyncGenerator[str, No
     if resp.status_code == 429:
         print(f"Stream API 429 on {MODEL}, falling back to {FALLBACK_MODEL}")
         await resp.aclose()
-        resp = await _open_stream(FALLBACK_MODEL)
+        resp = await _open_stream(FALLBACK_MODEL, _strip_images(payload["messages"]))
 
     if resp.status_code != 200:
         body = await resp.aread()
