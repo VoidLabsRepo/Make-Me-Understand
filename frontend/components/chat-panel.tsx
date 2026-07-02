@@ -496,7 +496,16 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
               >
                 <Plus size={18} />
               </motion.button>
-              {/* Mobile: direct file trigger */}
+              {/* Mobile: camera + file picker */}
+              <motion.button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                whileTap={{ scale: 0.85 }}
+                transition={bounce}
+                className="md:hidden flex w-8 h-8 rounded-full bg-muted items-center justify-center text-muted-foreground hover:bg-muted/80 shrink-0"
+              >
+                <Camera size={18} />
+              </motion.button>
               <motion.button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
@@ -504,7 +513,7 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
                 transition={bounce}
                 className="md:hidden flex w-8 h-8 rounded-full bg-muted items-center justify-center text-muted-foreground hover:bg-muted/80 shrink-0"
               >
-                <Plus size={18} />
+                <ImageIcon size={18} />
               </motion.button>
               <input
                 value={input}
