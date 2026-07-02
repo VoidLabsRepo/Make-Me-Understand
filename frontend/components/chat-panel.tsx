@@ -45,6 +45,7 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
   const [recording, setRecording] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [hasMore, setHasMore] = useState(hasMoreMessages);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -496,25 +497,48 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
               >
                 <Plus size={18} />
               </motion.button>
-              {/* Mobile: camera + file picker */}
-              <motion.button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                whileTap={{ scale: 0.85 }}
-                transition={bounce}
-                className="md:hidden flex w-8 h-8 rounded-full bg-muted items-center justify-center text-muted-foreground hover:bg-muted/80 shrink-0"
-              >
-                <Camera size={18} />
-              </motion.button>
-              <motion.button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                whileTap={{ scale: 0.85 }}
-                transition={bounce}
-                className="md:hidden flex w-8 h-8 rounded-full bg-muted items-center justify-center text-muted-foreground hover:bg-muted/80 shrink-0"
-              >
-                <ImageIcon size={18} />
-              </motion.button>
+              {/* Mobile: plus opens camera/file picker menu */}
+              <div className="relative md:hidden shrink-0">
+                <motion.button
+                  type="button"
+                  onClick={() => setMobileMenuOpen((v) => !v)}
+                  whileTap={{ scale: 0.85 }}
+                  transition={bounce}
+                  className={`flex w-8 h-8 rounded-full items-center justify-center shrink-0 ${
+                    mobileMenuOpen ? "bg-foreground text-background rotate-45" : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  <Plus size={18} />
+                </motion.button>
+                <AnimatePresence>
+                  {mobileMenuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9, y: 4 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9, y: 4 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col gap-1 bg-white rounded-2xl shadow-lg border border-border/40 p-1.5 min-w-[120px]"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => { setMobileMenuOpen(false); cameraInputRef.current?.click(); }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-foreground hover:bg-muted/60 transition-colors"
+                      >
+                        <Camera size={16} />
+                        Camera
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setMobileMenuOpen(false); fileInputRef.current?.click(); }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-foreground hover:bg-muted/60 transition-colors"
+                      >
+                        <ImageIcon size={16} />
+                        Gallery
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
