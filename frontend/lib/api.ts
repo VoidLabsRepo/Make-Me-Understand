@@ -162,7 +162,7 @@ export interface VoiceResponse {
 }
 
 export async function sendVoiceMessage(sessionId: number, message: string): Promise<VoiceResponse> {
-  const res = await fetchWithTimeout(`${API_BASE}/api/sessions/${sessionId}/voice-chat`, {
+  const res = await fetchWithTimeout(`/api/sessions/${sessionId}/voice-chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message }),
