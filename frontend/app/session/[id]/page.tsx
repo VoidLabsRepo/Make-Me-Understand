@@ -324,7 +324,6 @@ export default function SessionPage() {
               notes={session.notes || ""}
               onClose={() => setVoiceMode(false)}
               onNoteChange={handleRefresh}
-              initialMessages={session.messages || []}
             />
           </div>
           <AnimatePresence mode="popLayout">
