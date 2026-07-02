@@ -556,12 +556,27 @@ async def voice_chat(
     await db.commit()
 
     # Get voice-friendly AI response — images sent as multimodal content
-    raw_response = await voice_chat_with_context(
-        notes, history, req.message,
-        existing_notes=existing_notes, user_notes=user_notes_str,
-        images=images if images else None,
-        existing_canvases=existing_canvases,
-    )
+    try:
+        raw_response = await voice_chat_with_context(
+            notes, history, req.message,
+            existing_notes=existing_notes, user_notes=user_notes_str,
+            images=images if images else None,
+            existing_canvases=existing_canvases,
+        )
+    except Exception as e:
+        print(f"[voice_chat] LLM failed: {e}")
+        response = "Sorry, I'm having trouble connecting right now. Please try again."
+        wav_bytes, timings = await generate_voice_timings(response)
+        cache_path = get_cache_path(session_id)
+        with open(cache_path, "wb") as f:
+            f.write(wav_bytes)
+        return {
+            "response": response,
+            "reasoning": [],
+            "word_timings": timings,
+            "note_changes": [],
+            "canvas_changes": [],
+        }
 
     # Parse and execute note + canvas tool calls before cleaning text
     clean_response, tool_calls = _parse_tool_calls(raw_response)

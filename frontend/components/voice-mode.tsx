@@ -158,6 +158,7 @@ export function VoiceMode({ sessionId, notes, onClose, onNoteChange }: VoiceMode
     } catch (err: any) {
       console.error("[voice] speakResponse failed:", err?.name, err?.message);
       if (err.name !== "AbortError") {
+        setAiSubtitle("Sorry, something went wrong. Please try again.");
         setPersonaState("idle");
       }
     }
