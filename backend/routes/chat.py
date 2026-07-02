@@ -648,20 +648,24 @@ async def voice_chat(
     print(f"[voice_chat] Audio cached at {cache_path}")
 
     # Save AI response
+    print(f"[voice_chat] Saving AI response to database...")
     await db.execute(
         "INSERT INTO messages (session_id, role, content, reasoning) VALUES (?, ?, ?, ?)",
         (session_id, "assistant", response, json.dumps(reasoning)),
     )
     await db.commit()
+    print(f"[voice_chat] AI response saved")
 
     # Auto-generate session title after 5 user messages (if still default)
     if session_title == "New Session":
+        print(f"[voice_chat] Checking if title generation needed...")
         count_cursor = await db.execute(
             "SELECT COUNT(*) as cnt FROM messages WHERE session_id = ? AND role = 'user'",
             (session_id,),
         )
         count_row = await count_cursor.fetchone()
         if count_row and count_row["cnt"] >= 5:
+            print(f"[voice_chat] Generating session title...")
             all_msgs_cursor = await db.execute(
                 "SELECT role, content FROM messages WHERE session_id = ? ORDER BY created_at",
                 (session_id,),
@@ -672,10 +676,22 @@ async def voice_chat(
                 if new_title:
                     await db.execute("UPDATE sessions SET title = ? WHERE id = ?", (new_title, session_id))
                     await db.commit()
-            except Exception:
+                    print(f"[voice_chat] Title updated to: {new_title}")
+            except Exception as e:
+                print(f"[voice_chat] Title generation failed: {e}")
                 pass  # ponytail: title generation is best-effort
 
-    return {"response": response, "reasoning": reasoning, "word_timings": timings, "note_changes": note_changes, "canvas_changes": canvas_changes}
+    print(f"[voice_chat] Returning response: {len(response)} chars, {len(timings)} timings")
+    print(f"[voice_chat] Returning response: {len(response)} chars, {len(timings)} timings")
+    try:
+        result = {"response": response, "reasoning": reasoning, "word_timings": timings, "note_changes": note_changes, "canvas_changes": canvas_changes}
+        print(f"[voice_chat] Response dict created, returning...")
+        return result
+    except Exception as e:
+        print(f"[voice_chat] ERROR returning response: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 class TTSRequest(BaseModel):
