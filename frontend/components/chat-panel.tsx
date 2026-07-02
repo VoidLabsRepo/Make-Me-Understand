@@ -15,7 +15,7 @@ import {
   ChainOfThoughtHeader,
   ChainOfThoughtStep,
 } from "@/components/ai-elements/chain-of-thought";
-import { Plus, Send, Paperclip, Image as ImageIcon, X, Loader2 } from "lucide-react";
+import { Plus, Send, Paperclip, Image as ImageIcon, Camera, X, Loader2 } from "lucide-react";
 
 interface ChatPanelProps {
   sessionId: number;
@@ -55,6 +55,7 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didLongPressRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const initialScrollDone = useRef(false);
   const syntheticIdRef = useRef(0);
   const synthId = () => --syntheticIdRef.current;
@@ -471,6 +472,13 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
                 >
                   <ImageIcon size={16} />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => cameraInputRef.current?.click()}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted/60 transition-colors"
+                >
+                  <Camera size={16} />
+                </button>
               </div>
             )}
 
@@ -524,6 +532,17 @@ export function ChatPanel({ sessionId, initialMessages, hasMoreMessages, onVoice
             type="file"
             multiple
             accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
             className="hidden"
             onChange={(e) => {
               if (e.target.files) addFiles(e.target.files);
