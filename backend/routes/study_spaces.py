@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 import aiosqlite
 from database import get_db
+from auth import get_current_user
 
 router = APIRouter(prefix="/api/study-spaces", tags=["study-spaces"])
 
@@ -16,19 +17,20 @@ class AddSessionRequest(BaseModel):
 
 
 @router.post("")
-async def create_space(body: CreateSpaceRequest, db: aiosqlite.Connection = Depends(get_db)):
+async def create_space(body: CreateSpaceRequest, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute(
-        "INSERT INTO study_spaces (name, emoji) VALUES (?, ?)",
-        (body.name, body.emoji),
+        "INSERT INTO study_spaces (user_id, name, emoji) VALUES (?, ?, ?)",
+        (user_id, body.name, body.emoji),
     )
     await db.commit()
     return {"id": cursor.lastrowid, "name": body.name, "emoji": body.emoji}
 
 
 @router.get("")
-async def list_spaces(db: aiosqlite.Connection = Depends(get_db)):
+async def list_spaces(user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute(
-        "SELECT id, name, emoji, created_at FROM study_spaces ORDER BY created_at DESC"
+        "SELECT id, name, emoji, created_at FROM study_spaces WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
     )
     spaces = [dict(r) for r in await cursor.fetchall()]
 
@@ -53,10 +55,10 @@ async def list_spaces(db: aiosqlite.Connection = Depends(get_db)):
 
 
 @router.get("/{space_id}")
-async def get_space(space_id: int, db: aiosqlite.Connection = Depends(get_db)):
+async def get_space(space_id: int, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute(
-        "SELECT id, name, emoji, created_at FROM study_spaces WHERE id = ?",
-        (space_id,),
+        "SELECT id, name, emoji, created_at FROM study_spaces WHERE id = ? AND user_id = ?",
+        (space_id, user_id),
     )
     row = await cursor.fetchone()
     if not row:
@@ -76,8 +78,8 @@ async def get_space(space_id: int, db: aiosqlite.Connection = Depends(get_db)):
 
 
 @router.delete("/{space_id}")
-async def delete_space(space_id: int, db: aiosqlite.Connection = Depends(get_db)):
-    cursor = await db.execute("SELECT id FROM study_spaces WHERE id = ?", (space_id,))
+async def delete_space(space_id: int, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
+    cursor = await db.execute("SELECT id FROM study_spaces WHERE id = ? AND user_id = ?", (space_id, user_id))
     if not await cursor.fetchone():
         raise HTTPException(status_code=404, detail="Study space not found")
     await db.execute("DELETE FROM study_spaces WHERE id = ?", (space_id,))
@@ -86,8 +88,8 @@ async def delete_space(space_id: int, db: aiosqlite.Connection = Depends(get_db)
 
 
 @router.patch("/{space_id}")
-async def rename_space(space_id: int, body: CreateSpaceRequest, db: aiosqlite.Connection = Depends(get_db)):
-    cursor = await db.execute("SELECT id FROM study_spaces WHERE id = ?", (space_id,))
+async def rename_space(space_id: int, body: CreateSpaceRequest, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
+    cursor = await db.execute("SELECT id FROM study_spaces WHERE id = ? AND user_id = ?", (space_id, user_id))
     if not await cursor.fetchone():
         raise HTTPException(status_code=404, detail="Study space not found")
     await db.execute(
@@ -99,14 +101,12 @@ async def rename_space(space_id: int, body: CreateSpaceRequest, db: aiosqlite.Co
 
 
 @router.post("/{space_id}/sessions")
-async def add_session_to_space(space_id: int, body: AddSessionRequest, db: aiosqlite.Connection = Depends(get_db)):
-    # Verify space exists
-    cursor = await db.execute("SELECT id FROM study_spaces WHERE id = ?", (space_id,))
+async def add_session_to_space(space_id: int, body: AddSessionRequest, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
+    cursor = await db.execute("SELECT id FROM study_spaces WHERE id = ? AND user_id = ?", (space_id, user_id))
     if not await cursor.fetchone():
         raise HTTPException(status_code=404, detail="Study space not found")
 
-    # Verify session exists
-    cursor = await db.execute("SELECT id FROM sessions WHERE id = ?", (body.session_id,))
+    cursor = await db.execute("SELECT id FROM sessions WHERE id = ? AND user_id = ?", (body.session_id, user_id))
     if not await cursor.fetchone():
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -123,7 +123,7 @@ async def add_session_to_space(space_id: int, body: AddSessionRequest, db: aiosq
 
 
 @router.delete("/{space_id}/sessions/{session_id}")
-async def remove_session_from_space(space_id: int, session_id: int, db: aiosqlite.Connection = Depends(get_db)):
+async def remove_session_from_space(space_id: int, session_id: int, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     await db.execute(
         "DELETE FROM session_study_spaces WHERE session_id = ? AND study_space_id = ?",
         (session_id, space_id),

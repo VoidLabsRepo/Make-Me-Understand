@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import aiosqlite
 import json
 from database import get_db
+from auth import get_current_user
 
 router = APIRouter(prefix="/api/canvases", tags=["canvases"])
 
@@ -28,7 +29,7 @@ def _parse_elements(raw: str) -> list:
 
 
 @router.get("/session/{session_id}")
-async def list_canvases(session_id: int, db: aiosqlite.Connection = Depends(get_db)):
+async def list_canvases(session_id: int, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute(
         "SELECT id, session_id, title, created_at, updated_at "
         "FROM canvases WHERE session_id = ? ORDER BY created_at ASC",
@@ -48,7 +49,7 @@ async def list_canvases(session_id: int, db: aiosqlite.Connection = Depends(get_
 
 
 @router.get("/{canvas_id}")
-async def get_canvas(canvas_id: int, db: aiosqlite.Connection = Depends(get_db)):
+async def get_canvas(canvas_id: int, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute(
         "SELECT id, session_id, title, elements, created_at, updated_at "
         "FROM canvases WHERE id = ?",
@@ -68,7 +69,7 @@ async def get_canvas(canvas_id: int, db: aiosqlite.Connection = Depends(get_db))
 
 
 @router.post("")
-async def create_canvas(body: CreateCanvasRequest, db: aiosqlite.Connection = Depends(get_db)):
+async def create_canvas(body: CreateCanvasRequest, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     elements_json = json.dumps(body.elements)
     cursor = await db.execute(
         "INSERT INTO canvases (session_id, title, elements) VALUES (?, ?, ?)",
@@ -88,6 +89,7 @@ async def create_canvas(body: CreateCanvasRequest, db: aiosqlite.Connection = De
 async def update_canvas(
     canvas_id: int,
     body: UpdateCanvasRequest,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     cursor = await db.execute("SELECT id FROM canvases WHERE id = ?", (canvas_id,))
@@ -114,7 +116,7 @@ async def update_canvas(
 
 
 @router.delete("/{canvas_id}")
-async def delete_canvas(canvas_id: int, db: aiosqlite.Connection = Depends(get_db)):
+async def delete_canvas(canvas_id: int, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute("SELECT id FROM canvases WHERE id = ?", (canvas_id,))
     if not await cursor.fetchone():
         raise HTTPException(status_code=404, detail="Canvas not found")

@@ -6,6 +6,7 @@ import re
 import json
 import os
 from database import get_db
+from auth import get_current_user
 from services.llm import chat_with_context, voice_explain, voice_chat_with_context, clean_voice_text, generate_title, chat_completion_stream, build_chat_system_prompt
 from services.tts import generate_tts, stream_tts, make_wav_header, get_cache_path, generate_voice_timings
 
@@ -206,10 +207,11 @@ async def _execute_tool_calls(db: aiosqlite.Connection, session_id: int, tool_ca
 async def chat(
     session_id: int,
     req: ChatRequest,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     # Get session data
-    cursor = await db.execute("SELECT notes, image_context, title FROM sessions WHERE id = ?", (session_id,))
+    cursor = await db.execute("SELECT notes, image_context, title FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
     row = await cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -304,10 +306,11 @@ async def chat(
 async def chat_stream(
     session_id: int,
     req: ChatRequest,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     """Stream chat response via SSE. Events: text, reasoning, canvas, note, done, error."""
-    cursor = await db.execute("SELECT notes, image_context, title FROM sessions WHERE id = ?", (session_id,))
+    cursor = await db.execute("SELECT notes, image_context, title FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
     row = await cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -507,11 +510,12 @@ def _strip_special_blocks(text: str) -> str:
 async def voice_chat(
     session_id: int,
     req: ChatRequest,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     print(f"[voice_chat] Starting for session {session_id}, message: {req.message[:50]}...")
     # Get session data
-    cursor = await db.execute("SELECT notes, image_context, title FROM sessions WHERE id = ?", (session_id,))
+    cursor = await db.execute("SELECT notes, image_context, title FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
     row = await cursor.fetchone()
     if not row:
         print(f"[voice_chat] Session {session_id} not found")
@@ -703,9 +707,10 @@ class TTSRequest(BaseModel):
 async def tts(
     session_id: int,
     req: TTSRequest,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
-    cursor = await db.execute("SELECT notes FROM sessions WHERE id = ?", (session_id,))
+    cursor = await db.execute("SELECT notes FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
     row = await cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -732,6 +737,7 @@ async def tts_get(
     session_id: int,
     question: str | None = None,
     text: str | None = None,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     print(f"[tts_get] Request for session {session_id}, question={question}, text={text}")
@@ -752,7 +758,7 @@ async def tts_get(
     print(f"[tts_get] No cache found at {cache_path}, generating dynamically")
 
     # 2. Fallback to dynamic generation
-    cursor = await db.execute("SELECT notes FROM sessions WHERE id = ?", (session_id,))
+    cursor = await db.execute("SELECT notes FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
     row = await cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Session not found")

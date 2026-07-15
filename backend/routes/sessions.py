@@ -8,6 +8,7 @@ from PIL import Image
 from database import get_db, DB_PATH, BACKUP_DB_PATH
 import traceback
 from datetime import datetime, timedelta
+from auth import get_current_user
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
@@ -64,12 +65,13 @@ class CreateSessionRequest(BaseModel):
 @router.post("")
 async def create_session(
     body: CreateSessionRequest | None = None,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     title = (body.title if body else None) or "New Session"
     cursor = await db.execute(
-        "INSERT INTO sessions (title, notes, image_context) VALUES (?, '', '')",
-        (title,),
+        "INSERT INTO sessions (user_id, title, notes, image_context) VALUES (?, ?, '', '')",
+        (user_id, title),
     )
     await db.commit()
     session_id = cursor.lastrowid
@@ -81,11 +83,12 @@ async def append_images(
     session_id: int,
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     """Upload images — extract text and store permanently in image_context."""
     cursor = await db.execute(
-        "SELECT image_context FROM sessions WHERE id = ?", (session_id,)
+        "SELECT image_context FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id)
     )
     row = await cursor.fetchone()
     if not row:
@@ -110,11 +113,15 @@ async def append_images(
 
 
 @router.get("")
-async def list_sessions(db: aiosqlite.Connection = Depends(get_db)):
+async def list_sessions(
+    user_id: int = Depends(get_current_user),
+    db: aiosqlite.Connection = Depends(get_db),
+):
     cursor = await db.execute(
         "SELECT id, title, created_at FROM sessions "
-        "WHERE id NOT IN (SELECT session_id FROM session_study_spaces) "
-        "ORDER BY created_at DESC"
+        "WHERE user_id = ? AND id NOT IN (SELECT session_id FROM session_study_spaces) "
+        "ORDER BY created_at DESC",
+        (user_id,),
     )
     rows = await cursor.fetchall()
     return [
@@ -124,10 +131,14 @@ async def list_sessions(db: aiosqlite.Connection = Depends(get_db)):
 
 
 @router.get("/{session_id}")
-async def get_session(session_id: int, db: aiosqlite.Connection = Depends(get_db)):
+async def get_session(
+    session_id: int,
+    user_id: int = Depends(get_current_user),
+    db: aiosqlite.Connection = Depends(get_db),
+):
     cursor = await db.execute(
-        "SELECT id, title, notes, image_context, created_at FROM sessions WHERE id = ?",
-        (session_id,),
+        "SELECT id, title, notes, image_context, created_at FROM sessions WHERE id = ? AND user_id = ?",
+        (session_id, user_id),
     )
     row = await cursor.fetchone()
     if not row:
@@ -178,6 +189,7 @@ async def list_messages(
     session_id: int,
     before: int | None = None,
     limit: int = 7,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     """Load older messages before a given message id (paged)."""
@@ -216,9 +228,10 @@ class RenameRequest(BaseModel):
 async def rename_session(
     session_id: int,
     body: RenameRequest,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
-    cursor = await db.execute("SELECT id FROM sessions WHERE id = ?", (session_id,))
+    cursor = await db.execute("SELECT id FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
     if not await cursor.fetchone():
         raise HTTPException(status_code=404, detail="Session not found")
 
@@ -230,9 +243,10 @@ async def rename_session(
 @router.delete("/{session_id}")
 async def delete_session(
     session_id: int,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
-    cursor = await db.execute("SELECT id FROM sessions WHERE id = ?", (session_id,))
+    cursor = await db.execute("SELECT id FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
     if not await cursor.fetchone():
         raise HTTPException(status_code=404, detail="Session not found")
 

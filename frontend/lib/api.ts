@@ -1,5 +1,23 @@
 const API_BASE = "";
 
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("mmu_token");
+}
+
+export function setToken(token: string) {
+  localStorage.setItem("mmu_token", token);
+}
+
+export function clearToken() {
+  localStorage.removeItem("mmu_token");
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 // ponytail: fetch + 120s abort, kills 3x AbortController boilerplate
 async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
   const ac = new AbortController();
@@ -46,19 +64,19 @@ export async function createSession(
 ): Promise<Session> {
   const res = await fetch(`${API_BASE}/api/sessions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ title: title || "New Session" }),
   });
   return checkOk(res, "create session").json();
 }
 
 export async function listSessions(): Promise<SessionListItem[]> {
-  const res = await fetch(`${API_BASE}/api/sessions`);
+  const res = await fetch(`${API_BASE}/api/sessions`, { headers: authHeaders() });
   return checkOk(res, "list sessions").json();
 }
 
 export async function getSession(id: number): Promise<Session> {
-  const res = await fetch(`${API_BASE}/api/sessions/${id}`);
+  const res = await fetch(`${API_BASE}/api/sessions/${id}`, { headers: authHeaders() });
   return checkOk(res, "get session").json();
 }
 
@@ -70,7 +88,7 @@ export async function getMessages(
   const params = new URLSearchParams();
   if (beforeId != null) params.set("before", String(beforeId));
   params.set("limit", String(limit));
-  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages?${params}`);
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages?${params}`, { headers: authHeaders() });
   return checkOk(res, "get messages").json();
 }
 
@@ -91,7 +109,7 @@ export async function sendMessage(
 }> {
   const res = await fetchWithTimeout(`${API_BASE}/api/sessions/${sessionId}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ message }),
   });
   console.log("[api] sendMessage:", res.status);
@@ -109,7 +127,7 @@ export async function* sendMessageStream(
 ): AsyncGenerator<StreamEvent, void, unknown> {
   const res = await fetchWithTimeout(`${API_BASE}/api/sessions/${sessionId}/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ message }),
   });
   console.log("[api] sendMessageStream:", res.status);
@@ -164,7 +182,7 @@ export interface VoiceResponse {
 export async function sendVoiceMessage(sessionId: number, message: string): Promise<VoiceResponse> {
   const res = await fetchWithTimeout(`/api/sessions/${sessionId}/voice-chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ message }),
   });
   console.log("[api] sendVoiceMessage:", res.status);
@@ -178,6 +196,7 @@ export async function appendImages(sessionId: number, files: File[]): Promise<st
   }
   const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/append-images`, {
     method: "POST",
+    headers: authHeaders(),
     body: form,
   });
   const data = await checkOk(res, "append images").json();
@@ -187,7 +206,7 @@ export async function appendImages(sessionId: number, files: File[]): Promise<st
 export async function renameSession(id: number, title: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/sessions/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ title }),
   });
   checkOk(res, "rename session");
@@ -196,6 +215,7 @@ export async function renameSession(id: number, title: string): Promise<void> {
 export async function deleteSession(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/sessions/${id}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   checkOk(res, "delete session");
 }
@@ -216,12 +236,12 @@ export interface NoteChange {
 }
 
 export async function listNotes(sessionId: number): Promise<Note[]> {
-  const res = await fetch(`${API_BASE}/api/notes/session/${sessionId}`);
+  const res = await fetch(`${API_BASE}/api/notes/session/${sessionId}`, { headers: authHeaders() });
   return checkOk(res, "list notes").json();
 }
 
 export async function getNote(noteId: number): Promise<Note> {
-  const res = await fetch(`${API_BASE}/api/notes/${noteId}`);
+  const res = await fetch(`${API_BASE}/api/notes/${noteId}`, { headers: authHeaders() });
   return checkOk(res, "get note").json();
 }
 
@@ -229,7 +249,7 @@ export async function createNote(sessionId: number, title: string, content: stri
   console.log("[api] createNote:", title);
   const res = await fetch(`${API_BASE}/api/notes`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ session_id: sessionId, title, content }),
   });
   return checkOk(res, "create note").json();
@@ -239,7 +259,7 @@ export async function updateNote(noteId: number, data: { title?: string; content
   console.log("[api] updateNote:", noteId);
   const res = await fetch(`${API_BASE}/api/notes/${noteId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(data),
   });
   checkOk(res, "update note");
@@ -249,6 +269,7 @@ export async function deleteNote(noteId: number): Promise<void> {
   console.log("[api] deleteNote:", noteId);
   const res = await fetch(`${API_BASE}/api/notes/${noteId}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   checkOk(res, "delete note");
 }
@@ -283,12 +304,12 @@ export interface CanvasChange {
 }
 
 export async function listCanvases(sessionId: number): Promise<Canvas[]> {
-  const res = await fetch(`${API_BASE}/api/canvases/session/${sessionId}`);
+  const res = await fetch(`${API_BASE}/api/canvases/session/${sessionId}`, { headers: authHeaders() });
   return checkOk(res, "list canvases").json();
 }
 
 export async function getCanvas(canvasId: number): Promise<Canvas> {
-  const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`);
+  const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`, { headers: authHeaders() });
   return checkOk(res, "get canvas").json();
 }
 
@@ -296,7 +317,7 @@ export async function createCanvas(sessionId: number, title: string, elements: C
   console.log("[api] createCanvas:", title, elements.length, "elements");
   const res = await fetch(`${API_BASE}/api/canvases`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ session_id: sessionId, title, elements }),
   });
   return checkOk(res, "create canvas").json();
@@ -306,7 +327,7 @@ export async function updateCanvas(canvasId: number, data: { title?: string; ele
   console.log("[api] updateCanvas:", canvasId);
   const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(data),
   });
   checkOk(res, "update canvas");
@@ -316,6 +337,7 @@ export async function deleteCanvas(canvasId: number): Promise<void> {
   console.log("[api] deleteCanvas:", canvasId);
   const res = await fetch(`${API_BASE}/api/canvases/${canvasId}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   checkOk(res, "delete canvas");
 }
@@ -336,19 +358,19 @@ export interface StudySpaceDetail extends StudySpace {
 }
 
 export async function listStudySpaces(): Promise<StudySpace[]> {
-  const res = await fetch(`${API_BASE}/api/study-spaces`);
+  const res = await fetch(`${API_BASE}/api/study-spaces`, { headers: authHeaders() });
   return checkOk(res, "list study spaces").json();
 }
 
 export async function getStudySpace(id: number): Promise<StudySpaceDetail> {
-  const res = await fetch(`${API_BASE}/api/study-spaces/${id}`);
+  const res = await fetch(`${API_BASE}/api/study-spaces/${id}`, { headers: authHeaders() });
   return checkOk(res, "get study space").json();
 }
 
 export async function createStudySpace(name: string, emoji: string = ""): Promise<StudySpace> {
   const res = await fetch(`${API_BASE}/api/study-spaces`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ name, emoji }),
   });
   return checkOk(res, "create study space").json();
@@ -357,7 +379,7 @@ export async function createStudySpace(name: string, emoji: string = ""): Promis
 export async function renameStudySpace(id: number, name: string, emoji: string = ""): Promise<void> {
   const res = await fetch(`${API_BASE}/api/study-spaces/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ name, emoji }),
   });
   checkOk(res, "rename study space");
@@ -366,6 +388,7 @@ export async function renameStudySpace(id: number, name: string, emoji: string =
 export async function deleteStudySpace(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/study-spaces/${id}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   checkOk(res, "delete study space");
 }
@@ -373,7 +396,7 @@ export async function deleteStudySpace(id: number): Promise<void> {
 export async function addSessionToSpace(spaceId: number, sessionId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/study-spaces/${spaceId}/sessions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ session_id: sessionId }),
   });
   checkOk(res, "add session to space");
@@ -382,7 +405,26 @@ export async function addSessionToSpace(spaceId: number, sessionId: number): Pro
 export async function removeSessionFromSpace(spaceId: number, sessionId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/study-spaces/${spaceId}/sessions/${sessionId}`, {
     method: "DELETE",
+    headers: authHeaders(),
   });
   checkOk(res, "remove session from space");
+}
+
+export async function signup(email: string, password: string): Promise<{ token: string; email: string }> {
+  const res = await fetch(`${API_BASE}/api/auth/signup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return checkOk(res, "signup").json();
+}
+
+export async function login(email: string, password: string): Promise<{ token: string; email: string }> {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  return checkOk(res, "login").json();
 }
 

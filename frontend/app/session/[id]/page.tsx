@@ -13,6 +13,7 @@ import { SidebarToggleIcon } from "@/components/unlumen-ui/sidebar-toggle-icon";
 import { ArrowLeft, FileText, LayoutGrid } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 type SidebarTab = "notes" | "canvas";
 
@@ -276,13 +277,20 @@ export default function SessionPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const isMobile = useIsMobile();
 
+  const { loading: authLoading, authenticated } = useAuth();
+
   useEffect(() => {
+    if (!authLoading && !authenticated) {
+      router.push("/login");
+      return;
+    }
+    if (authLoading || !authenticated) return;
     const id = Number(params.id);
     if (!id) return;
     getSession(id)
       .then(setSession)
       .catch(() => router.push("/"));
-  }, [params.id, router]);
+  }, [params.id, router, authLoading, authenticated]);
 
   const closeSidePanel = useCallback(() => setSidePanelOpen(false), []);
 

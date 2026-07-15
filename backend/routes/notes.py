@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 import aiosqlite
 from database import get_db
+from auth import get_current_user
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 
@@ -18,7 +19,7 @@ class UpdateNoteRequest(BaseModel):
 
 
 @router.get("/session/{session_id}")
-async def list_notes(session_id: int, db: aiosqlite.Connection = Depends(get_db)):
+async def list_notes(session_id: int, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute(
         "SELECT id, session_id, title, created_at, updated_at "
         "FROM notes WHERE session_id = ? ORDER BY created_at ASC",
@@ -38,7 +39,7 @@ async def list_notes(session_id: int, db: aiosqlite.Connection = Depends(get_db)
 
 
 @router.get("/{note_id}")
-async def get_note(note_id: int, db: aiosqlite.Connection = Depends(get_db)):
+async def get_note(note_id: int, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute(
         "SELECT id, session_id, title, content, created_at, updated_at "
         "FROM notes WHERE id = ?",
@@ -58,7 +59,7 @@ async def get_note(note_id: int, db: aiosqlite.Connection = Depends(get_db)):
 
 
 @router.post("")
-async def create_note(body: CreateNoteRequest, db: aiosqlite.Connection = Depends(get_db)):
+async def create_note(body: CreateNoteRequest, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute(
         "INSERT INTO notes (session_id, title, content) VALUES (?, ?, ?)",
         (body.session_id, body.title, body.content),
@@ -77,6 +78,7 @@ async def create_note(body: CreateNoteRequest, db: aiosqlite.Connection = Depend
 async def update_note(
     note_id: int,
     body: UpdateNoteRequest,
+    user_id: int = Depends(get_current_user),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     cursor = await db.execute("SELECT id FROM notes WHERE id = ?", (note_id,))
@@ -103,7 +105,7 @@ async def update_note(
 
 
 @router.delete("/{note_id}")
-async def delete_note(note_id: int, db: aiosqlite.Connection = Depends(get_db)):
+async def delete_note(note_id: int, user_id: int = Depends(get_current_user), db: aiosqlite.Connection = Depends(get_db)):
     cursor = await db.execute("SELECT id FROM notes WHERE id = ?", (note_id,))
     if not await cursor.fetchone():
         raise HTTPException(status_code=404, detail="Note not found")

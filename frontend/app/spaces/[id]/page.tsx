@@ -14,16 +14,24 @@ import {
   type StudySpaceDetail,
   type SessionListItem,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export default function SpaceDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { loading: authLoading, authenticated } = useAuth();
   const [space, setSpace] = useState<StudySpaceDetail | null>(null);
   const [allSessions, setAllSessions] = useState<SessionListItem[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const id = Number(params.id);
+
+  useEffect(() => {
+    if (!authLoading && !authenticated) {
+      router.push("/login");
+    }
+  }, [router, authLoading, authenticated]);
 
   const fetchData = useCallback(async () => {
     try {

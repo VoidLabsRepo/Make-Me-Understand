@@ -17,12 +17,22 @@ async def get_db():
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await db.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 0,
                 title TEXT NOT NULL,
                 notes TEXT,
                 image_context TEXT DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
         await db.execute("""
@@ -51,15 +61,25 @@ async def init_db():
         columns = [row[1] for row in await cursor.fetchall()]
         if "image_context" not in columns:
             await db.execute("ALTER TABLE sessions ADD COLUMN image_context TEXT DEFAULT ''")
+        if "user_id" not in columns:
+            await db.execute("ALTER TABLE sessions ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0")
 
         await db.execute("""
             CREATE TABLE IF NOT EXISTS study_spaces (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL DEFAULT 0,
                 name TEXT NOT NULL,
                 emoji TEXT DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """)
+        # Migration: add user_id to study_spaces
+        ss_cursor = await db.execute("PRAGMA table_info(study_spaces)")
+        ss_columns = [row[1] for row in await ss_cursor.fetchall()]
+        if "user_id" not in ss_columns:
+            await db.execute("ALTER TABLE study_spaces ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0")
+
         await db.execute("""
             CREATE TABLE IF NOT EXISTS session_study_spaces (
                 session_id INTEGER NOT NULL,

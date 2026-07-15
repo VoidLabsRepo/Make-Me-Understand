@@ -2,18 +2,22 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import { bounce, stagger, cardPop } from "@/lib/animations";
 import { UploadDialog } from "@/components/upload-dialog";
 import { listSessions, renameSession, deleteSession, type SessionListItem } from "@/lib/api";
-import { MoreHorizontal, Pencil, Trash2, Check, X, FolderOpen } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, Check, X, FolderOpen, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ProgressiveBlur } from "@/components/ui/skiper-ui/skiper41";
 import { StudySpaces } from "@/components/study-spaces";
 import { Signature } from "@/components/ui/signature";
+import { useAuth } from "@/lib/auth";
 
 export default function Dashboard() {
+  const router = useRouter();
+  const { logout, loading, authenticated } = useAuth();
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -29,8 +33,14 @@ export default function Dashboard() {
   const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    listSessions().then(setSessions).catch(console.error);
-  }, []);
+    if (!loading && !authenticated) {
+      router.push("/login");
+      return;
+    }
+    if (!loading && authenticated) {
+      listSessions().then(setSessions).catch(console.error);
+    }
+  }, [loading, authenticated, router]);
 
   useEffect(() => {
     if (editingId !== null && inputRef.current) {
@@ -127,15 +137,26 @@ export default function Dashboard() {
 
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-medium text-muted-foreground">Recent Sessions</h2>
-              <motion.button
-                onClick={() => setShowCreateSpace(true)}
-                whileTap={{ scale: 0.9 }}
-                transition={bounce}
-                className="text-muted-foreground hover:text-foreground"
-                title="Create study space"
-              >
-                <FolderOpen size={18} />
-              </motion.button>
+              <div className="flex items-center gap-2">
+                <motion.button
+                  onClick={() => setShowCreateSpace(true)}
+                  whileTap={{ scale: 0.9 }}
+                  transition={bounce}
+                  className="text-muted-foreground hover:text-foreground"
+                  title="Create study space"
+                >
+                  <FolderOpen size={18} />
+                </motion.button>
+                <motion.button
+                  onClick={logout}
+                  whileTap={{ scale: 0.9 }}
+                  transition={bounce}
+                  className="text-muted-foreground hover:text-foreground"
+                  title="Log out"
+                >
+                  <LogOut size={18} />
+                </motion.button>
+              </div>
             </div>
               <motion.div
                 className="grid grid-cols-1 sm:grid-cols-2 gap-4"
