@@ -15,7 +15,7 @@ services:
       args:
         BACKEND_URL: http://backend:8007
     ports:
-      - "3000:3000"
+      - "3007:3007"
     environment:
       - BACKEND_URL=http://backend:8007
     depends_on:

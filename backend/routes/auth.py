@@ -22,6 +22,8 @@ async def signup(body: SignupRequest, db: aiosqlite.Connection = Depends(get_db)
     email = body.email.strip().lower()
     if not email or not body.password:
         raise HTTPException(status_code=400, detail="Email and password required")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
     cursor = await db.execute("SELECT id FROM users WHERE email = ?", (email,))
     if await cursor.fetchone():
         raise HTTPException(status_code=409, detail="Email already registered")
